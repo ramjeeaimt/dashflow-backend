@@ -624,6 +624,43 @@ paths:
         "200":
           description: ""
       tags: *a9
+  /projects/{id}:
+    get:
+      operationId: ProjectsController_findOneProject
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+      tags: *a9
+    put:
+      operationId: ProjectsController_updateProject
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+      tags: *a9
+    delete:
+      operationId: ProjectsController_deleteProject
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+      tags: *a9
   /finance/payroll:
     post:
       operationId: FinanceController_createPayroll
@@ -671,6 +708,11 @@ paths:
           in: query
           schema:
             type: string
+        - name: currency
+          required: true
+          in: query
+          schema:
+            type: string
       responses:
         "200":
           description: ""
@@ -680,6 +722,21 @@ paths:
       operationId: FinanceController_getSummary
       parameters:
         - name: companyId
+          required: true
+          in: query
+          schema:
+            type: string
+        - name: month
+          required: true
+          in: query
+          schema:
+            type: number
+        - name: year
+          required: true
+          in: query
+          schema:
+            type: number
+        - name: currency
           required: true
           in: query
           schema:
@@ -723,6 +780,69 @@ paths:
         "200":
           description: ""
       tags: *a11
+  /notifications/fcm-token:
+    post:
+      operationId: NotificationsController_saveFcmToken
+      parameters: []
+      responses:
+        "201":
+          description: ""
+      tags: &a12
+        - Notifications
+    delete:
+      operationId: NotificationsController_removeFcmToken
+      parameters: []
+      responses:
+        "200":
+          description: ""
+      tags: *a12
+  /notifications/send:
+    post:
+      operationId: NotificationsController_send
+      parameters: []
+      responses:
+        "201":
+          description: ""
+      tags: *a12
+  /notifications/history:
+    get:
+      operationId: NotificationsController_getHistory
+      parameters:
+        - name: companyId
+          required: true
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+      tags: *a12
+  /notifications/stats:
+    get:
+      operationId: NotificationsController_getStats
+      parameters:
+        - name: companyId
+          required: true
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+      tags: *a12
+  /notifications/employees:
+    get:
+      operationId: NotificationsController_getEmployees
+      parameters:
+        - name: companyId
+          required: true
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+      tags: *a12
 info:
   title: Difmo CRM API
   description: The Difmo CRM API description

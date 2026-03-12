@@ -5,8 +5,10 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   ManyToOne,
+  JoinColumn,
 } from 'typeorm';
 import { Company } from '../../companies/company.entity';
+import { Employee } from '../../employees/employee.entity';
 
 @Entity()
 export class Expense {
@@ -25,6 +27,12 @@ export class Expense {
   @Column()
   category: string; // rent, utility, equipment, marketing, etc
 
+  @Column({ default: 'debit' })
+  type: string; // credit, debit
+
+  @Column({ default: 'USD' })
+  currency: string;
+
   @Column({ type: 'date' })
   date: Date;
 
@@ -34,8 +42,15 @@ export class Expense {
   @Column()
   companyId: string;
 
-  @Column({ default: 'paid' })
-  status: string; // pending, paid
+  @ManyToOne(() => Employee, { nullable: true })
+  @JoinColumn()
+  employee: Employee;
+
+  @Column({ nullable: true })
+  employeeId: string;
+
+  @Column({ default: 'pending' })
+  status: string; // pending, approved, paid, rejected
 
   @CreateDateColumn()
   createdAt: Date;
