@@ -37,6 +37,22 @@ export class ProjectsService {
     });
   }
 
+  async findOneProject(id: string): Promise<Project | null> {
+    return this.projectRepository.findOne({
+      where: { id },
+      relations: ['client'],
+    });
+  }
+
+  async updateProject(id: string, data: Partial<Project>): Promise<Project | null> {
+    await this.projectRepository.update(id, data);
+    return this.findOneProject(id);
+  }
+
+  async deleteProject(id: string): Promise<void> {
+    await this.projectRepository.delete(id);
+  }
+
   // Tasks
   async createTask(data: any): Promise<Task> {
     const taskData = {

@@ -1,9 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Payroll } from './entities/payroll.entity';
 import { Expense } from './entities/expense.entity';
 import { Company } from '../companies/company.entity';
+import { Employee } from '../employees/employee.entity';
 
 @Injectable()
 export class FinanceService {
@@ -14,7 +15,29 @@ export class FinanceService {
     private readonly expenseRepository: Repository<Expense>,
     @InjectRepository(Company)
     private readonly companyRepository: Repository<Company>,
-  ) {}
+    @InjectRepository(Employee)
+    private readonly employeeRepository: Repository<Employee>,
+  ) { }
+
+  // Exchange rates relative to 1 USD
+  private readonly rates = {
+    USD: 1,
+    INR: 83.5,
+    GBP: 0.78,
+    EUR: 0.92,
+    AED: 3.67
+  };
+
+  /**
+   * Converts an amount from source currency to target currency
+   */
+  private convert(amount: number, from: string = 'USD', to: string = 'USD'): number {
+    const fromRate = this.rates[from.toUpperCase()] || 1;
+    const toRate = this.rates[to.toUpperCase()] || 1;
+    // Convert to USD first, then to target
+    const inUsd = amount / fromRate;
+    return inUsd * toRate;
+  }
 
   // Payroll
   async createPayroll(data: Partial<Payroll>): Promise<Payroll> {
@@ -36,39 +59,101 @@ export class FinanceService {
   }
 
   // Expenses
-  async createExpense(data: Partial<Expense>): Promise<Expense> {
-    return this.expenseRepository.save(this.expenseRepository.create(data));
+  async createExpense(data: Partial<Expense>, userId: string): Promise<Expense> {
+    if (!data.companyId) {
+      throw new Error('companyId is required');
+    }
+
+    if (!data.amount || isNaN(Number(data.amount))) {
+      throw new Error('Valid amount is required');
+    }
+
+    try {
+      const employee = await this.employeeRepository.findOne({
+        where: { userId: userId }
+      });
+
+      if (employee) {
+        data.employeeId = employee.id;
+      }
+
+      // If no currency provided, default to USD
+      if (!data.currency) {
+        data.currency = 'USD';
+      }
+
+      const newExpense = this.expenseRepository.create(data);
+      return await this.expenseRepository.save(newExpense);
+    } catch (error) {
+      console.error('ERROR: Failed to save expense:', error);
+      throw error;
+    }
   }
 
-  async findAllExpenses(companyId: string): Promise<Expense[]> {
-    return this.expenseRepository.find({ where: { companyId } });
+  async findAllExpenses(companyId: string, targetCurrency: string = 'USD'): Promise<any[]> {
+    const expenses = await this.expenseRepository.find({
+      where: { companyId },
+      relations: ['employee', 'employee.user'],
+      order: { date: 'DESC' }
+    });
+
+    return expenses.map(e => ({
+      ...e,
+      originalAmount: Number(e.amount),
+      originalCurrency: e.currency,
+      amount: this.convert(Number(e.amount), e.currency, targetCurrency),
+      currency: targetCurrency.toUpperCase()
+    }));
   }
 
   // turnover & summary
-  async getFinancialSummary(companyId: string) {
-    const expenses = await this.expenseRepository.find({
-      where: { companyId },
-    });
-    const payrolls = await this.payrollRepository.find({
-      where: { companyId, status: 'paid' },
-    });
+  async getFinancialSummary(companyId: string, month?: number, year?: number, targetCurrency: string = 'USD') {
+    const where: any = { companyId };
 
-    const totalExpenses = expenses.reduce(
-      (sum, e) => sum + Number(e.amount),
-      0,
-    );
+    let expenses = await this.expenseRepository.find({ where });
+    let payrolls = await this.payrollRepository.find({ where: { ...where, status: 'paid' } });
+
+    if (month || year) {
+      expenses = expenses.filter(e => {
+        const d = new Date(e.date);
+        const mMatch = month ? (d.getMonth() + 1) === Number(month) : true;
+        const yMatch = year ? d.getFullYear() === Number(year) : true;
+        return mMatch && yMatch;
+      });
+
+      payrolls = payrolls.filter(p => {
+        const mMatch = month ? Number(p.month) === Number(month) : true;
+        const yMatch = year ? Number(p.year) === Number(year) : true;
+        return mMatch && yMatch;
+      });
+    }
+
+    // Normalized totals (all converted to targetCurrency)
+    const totalDebit = expenses
+      .filter((e) => e.type !== 'credit')
+      .reduce((sum, e) => sum + this.convert(Number(e.amount), e.currency, targetCurrency), 0);
+
+    const totalCredit = expenses
+      .filter((e) => e.type === 'credit')
+      .reduce((sum, e) => sum + this.convert(Number(e.amount), e.currency, targetCurrency), 0);
+
+    // Assuming payroll record salaries are in a base currency (USD) for this simplicity, 
+    // or we could add a currency field to payroll too if needed.
     const totalPayroll = payrolls.reduce(
-      (sum, p) => sum + Number(p.netSalary),
+      (sum, p) => sum + this.convert(Number(p.netSalary), 'USD', targetCurrency),
       0,
     );
 
-    // In a real app, turnover might come from Invoices/Payments.
-    // For now, we'll use a placeholder or calculate from active projects if needed.
     return {
-      totalExpenses,
+      totalDebit,
+      totalCredit,
+      totalExpenses: totalDebit,
       totalPayroll,
-      grandTotalOutgoing: totalExpenses + totalPayroll,
-      turnover: 500000, // Placeholder as requested 'perfectly' but need data source
+      grandTotalOutgoing: totalDebit + totalPayroll,
+      turnover: this.convert(500000, 'USD', targetCurrency) + totalCredit,
+      expenseCount: expenses.length,
+      payrollCount: payrolls.length,
+      currency: targetCurrency.toUpperCase()
     };
   }
 }

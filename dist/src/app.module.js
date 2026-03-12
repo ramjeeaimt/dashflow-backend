@@ -42,6 +42,9 @@ const projects_module_1 = require("./modules/projects/projects.module");
 const finance_module_1 = require("./modules/finance/finance.module");
 const audit_log_module_1 = require("./modules/audit-logs/audit-log.module");
 const time_tracking_module_1 = require("./modules/time-tracking/time-tracking.module");
+const notifications_module_1 = require("./modules/notifications/notifications.module");
+const notification_entity_1 = require("./modules/notifications/entities/notification.entity");
+const fcm_token_entity_1 = require("./modules/notifications/entities/fcm-token.entity");
 const dashboard_controller_1 = require("./modules/dashboard/dashboard.controller");
 const project_entity_2 = require("./modules/project/project.entity");
 const project_module_1 = require("./modules/project/project.module");
@@ -76,7 +79,9 @@ exports.AppModule = AppModule = __decorate([
                         expense_entity_1.Expense,
                         audit_log_entity_1.AuditLog,
                         time_entry_entity_1.TimeEntry,
-                        project_entity_2.AllProject
+                        project_entity_2.AllProject,
+                        notification_entity_1.Notification,
+                        fcm_token_entity_1.FcmToken,
                     ];
                     if (dbUrl) {
                         return {
@@ -114,7 +119,8 @@ exports.AppModule = AppModule = __decorate([
             audit_log_module_1.AuditLogModule,
             time_tracking_module_1.TimeTrackingModule,
             projects_module_1.ProjectsModule,
-            project_module_1.AllProjectModule
+            project_module_1.AllProjectModule,
+            notifications_module_1.NotificationsModule,
         ],
         controllers: [app_controller_1.AppController, dashboard_controller_1.DashboardController],
         providers: [app_service_1.AppService],

@@ -33,6 +33,9 @@ import { ProjectsModule } from './modules/projects/projects.module';
 import { FinanceModule } from './modules/finance/finance.module';
 import { AuditLogModule } from './modules/audit-logs/audit-log.module';
 import { TimeTrackingModule } from './modules/time-tracking/time-tracking.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
+import { Notification } from './modules/notifications/entities/notification.entity';
+import { FcmToken } from './modules/notifications/entities/fcm-token.entity';
 import { DashboardController } from './modules/dashboard/dashboard.controller';
 import { AllProject } from './modules/project/project.entity';
 import { AllProjectModule } from './modules/project/project.module';
@@ -67,8 +70,9 @@ import { AllProjectModule } from './modules/project/project.module';
           Expense,
           AuditLog,
           TimeEntry,
-          AllProject
-
+          AllProject,
+          Notification,
+          FcmToken,
         ];
         if (dbUrl) {
           return {
@@ -106,11 +110,10 @@ import { AllProjectModule } from './modules/project/project.module';
     AuditLogModule,
     TimeTrackingModule,
     ProjectsModule,
-    AllProjectModule
-
-
+    AllProjectModule,
+    NotificationsModule,
   ],
   controllers: [AppController, DashboardController],
   providers: [AppService],
 })
-export class AppModule {}
+export class AppModule { }

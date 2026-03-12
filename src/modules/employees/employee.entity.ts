@@ -82,6 +82,9 @@ export class Employee {
 
   // ✅ Soft delete fla
 
+  @Column({ default: false })
+  isDeleted: boolean
+
   @CreateDateColumn()
   createdAt: Date;
 

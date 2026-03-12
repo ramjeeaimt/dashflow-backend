@@ -18,7 +18,7 @@ import { Action } from '../access-control/ability.factory';
 @Controller('projects')
 @UseGuards(JwtAuthGuard, AbilitiesGuard)
 export class ProjectsController {
-  constructor(private readonly projectsService: ProjectsService) {}
+  constructor(private readonly projectsService: ProjectsService) { }
 
   // Clients
   @Post('clients')
@@ -46,17 +46,11 @@ export class ProjectsController {
     return this.projectsService.findAllProjects(companyId);
   }
 
-  // Tasks
+  // Tasks (MUST be before parameterized `:id` routes to avoid swallowing)
   @Post('tasks')
   @CheckAbilities({ action: Action.Create, subject: 'task' })
   createTask(@Body() data: any) {
     return this.projectsService.createTask(data);
-  }
-
-  @Get('tasks')
-  @CheckAbilities({ action: Action.Read, subject: 'task' })
-  findAllTasks(@Query('projectId') projectId: string) {
-    return this.projectsService.findAllTasks(projectId);
   }
 
   @Get('tasks/company')
@@ -65,9 +59,34 @@ export class ProjectsController {
     return this.projectsService.findAllTasksByCompany(companyId);
   }
 
+  @Get('tasks')
+  @CheckAbilities({ action: Action.Read, subject: 'task' })
+  findAllTasks(@Query('projectId') projectId: string) {
+    return this.projectsService.findAllTasks(projectId);
+  }
+
   @Put('tasks/:id')
   @CheckAbilities({ action: Action.Update, subject: 'task' })
   updateTask(@Param('id') id: string, @Body() data: any) {
     return this.projectsService.updateTask(id, data);
+  }
+
+  // Parameterized project routes (AFTER static routes)
+  @Get(':id')
+  @CheckAbilities({ action: Action.Read, subject: 'project' })
+  findOneProject(@Param('id') id: string) {
+    return this.projectsService.findOneProject(id);
+  }
+
+  @Put(':id')
+  @CheckAbilities({ action: Action.Update, subject: 'project' })
+  updateProject(@Param('id') id: string, @Body() data: any) {
+    return this.projectsService.updateProject(id, data);
+  }
+
+  @Delete(':id')
+  @CheckAbilities({ action: Action.Delete, subject: 'project' })
+  deleteProject(@Param('id') id: string) {
+    return this.projectsService.deleteProject(id);
   }
 }
