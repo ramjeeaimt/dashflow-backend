@@ -940,15 +940,6 @@ paths:
         "200":
           description: ""
       tags: *a13
-  /upload/image:
-    post:
-      operationId: UploadController_uploadImage
-      parameters: []
-      responses:
-        "201":
-          description: ""
-      tags:
-        - Upload
 info:
   title: Difmo CRM API
   description: The Difmo CRM API description
