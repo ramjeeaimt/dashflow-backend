@@ -23,12 +23,12 @@ export class Payroll {
   employeeId: string;
 
   @ManyToOne(() => Attendance, (attendance) => attendance.payrolls, {
-    nullable: false,
+    nullable: true,
   })
   @JoinColumn({ name: 'attendanceId' })
   attendance: Attendance;
 
-  @Column({ type: 'uuid' })
+  @Column({ type: 'uuid', nullable: true })
   attendanceId: string;
 
   @Column({ type: 'decimal', precision: 10, scale: 2 })
