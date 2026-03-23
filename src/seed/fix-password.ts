@@ -7,7 +7,7 @@ import { Department } from '../modules/departments/department.entity';
 import { Employee } from '../modules/employees/employee.entity';
 import { Designation } from '../modules/designations/designation.entity';
 import { Attendance } from '../modules/attendance/attendance.entity';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 
 require('dotenv').config();
 

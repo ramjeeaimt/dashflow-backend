@@ -1,7 +1,7 @@
 // @ts-nocheck
 
 import { DataSource } from 'typeorm';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 import { User } from '../modules/users/user.entity';
 import { Company } from '../modules/companies/company.entity';
 import { Role } from '../modules/access-control/role.entity';

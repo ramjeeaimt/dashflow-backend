@@ -3,7 +3,7 @@ import { AppModule } from '../app.module';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { User } from '../modules/users/user.entity';
 import { Repository } from 'typeorm';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 import { ConfigService } from '@nestjs/config';
 
 async function main() {
