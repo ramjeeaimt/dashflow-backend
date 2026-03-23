@@ -12,9 +12,19 @@ async function bootstrap() {
 }
 
 export default async (req, res) => {
-  if (!appPromise) {
-    appPromise = bootstrap();
+  try {
+    if (!appPromise) {
+      appPromise = bootstrap();
+    }
+    const handler = await appPromise;
+    return handler(req, res);
+  } catch (error) {
+    console.error('SERVERLESS_BOOTSTRAP_ERROR:', error);
+    res.status(500).json({
+      statusCode: 500,
+      message: 'Internal Server Error during bootstrap',
+      error: error.message,
+      stack: process.env.NODE_ENV === 'production' ? undefined : error.stack
+    });
   }
-  const handler = await appPromise;
-  handler(req, res);
 };

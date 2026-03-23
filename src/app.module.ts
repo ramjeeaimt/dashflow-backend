@@ -121,7 +121,6 @@ import { AllProjectModule } from './modules/project/project.module';
     FinanceModule,
     AuditLogModule,
     TimeTrackingModule,
-    ProjectsModule,
     AllProjectModule,
     NotificationsModule,
     // UploadModule,
