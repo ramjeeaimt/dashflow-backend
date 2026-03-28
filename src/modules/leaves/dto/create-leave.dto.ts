@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsString, IsDateString, IsEnum } from 'class-validator';
+import { IsNotEmpty, IsString, IsDateString, IsEnum, IsOptional } from 'class-validator';
 
 export class CreateLeaveDto {
   @IsNotEmpty()
@@ -13,6 +13,14 @@ export class CreateLeaveDto {
   @IsDateString()
   endDate: string;
 
+  @IsString()
+  @IsEnum(['PENDING', 'APPROVED', 'REJECTED', 'pending', 'approved', 'rejected'])
+  status: string;
+
+  @IsString()
+  @IsOptional()
+  adminComment?: string
+
   @IsNotEmpty()
   @IsString()
   reason: string;
@@ -24,6 +32,6 @@ export class CreateLeaveDto {
 
 export class UpdateLeaveStatusDto {
   @IsNotEmpty()
-  @IsEnum(['pending', 'approved', 'rejected'])
+  @IsEnum(['PENDING', 'APPROVED', 'REJECTED', 'pending', 'approved', 'rejected'])
   status: string;
 }

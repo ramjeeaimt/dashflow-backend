@@ -19,7 +19,7 @@ export class Project {
   projectName: string;
 
   @Column({ nullable: true })
-  githubLink: string;
+  githubLink: string;zz
 
   @Column({ nullable: true })
   deploymentLink: string;

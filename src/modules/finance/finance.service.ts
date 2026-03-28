@@ -59,19 +59,22 @@ export class FinanceService {
   //   return this.payrollRepository.save(this.payrollRepository.create(data));
   // }
 
-  async findAllPayroll(
-    attendanceId: string,
-    month?: number,
-    year?: number,
-  ): Promise<Payroll[]> {
-    const where: any = { attendanceId };
-    if (month) where.month = month;
-    if (year) where.year = year;
-    return this.payrollRepository.find({
-      where,
-      relations: ['employee', 'employee.user'],
-    });
-  }
+async findAllPayroll(
+  employeeId: string, // Changed from attendanceId
+  month?: number,
+  year?: number,
+): Promise<Payroll[]> {
+  const where: any = { employeeId }; // Search by employeeId
+  
+  if (month) where.month = Number(month);
+  if (year) where.year = Number(year);
+
+  return this.payrollRepository.find({
+    where,
+    relations: ['employee', 'employee.user'],
+    order: { year: 'DESC', month: 'DESC' } // Newest first
+  });
+}
 
   // Expenses
   async createExpense(data: Partial<Expense>, userId: string): Promise<Expense> {

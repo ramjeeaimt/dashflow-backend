@@ -27,7 +27,7 @@ export class FinanceController {
 
   createPayroll(@Body() data: any) {
 
-    console.log("🔥 BODY:", data);
+    console.log(" BODY:", data);
     return this.financeService.createPayroll(data);
   }
 
@@ -37,17 +37,15 @@ export class FinanceController {
     return this.financeService.markPayrollPaid(body.payrollId);
   }
 
-  @Get('payroll')
-  @CheckAbilities({ action: Action.Read, subject: 'payroll' })
-  findAllPayroll(
-    @Query('attendanceId') AttendanceId: string,
-    @Query('month') month?: number,
-    @Query('year') year?: number,
-  ) {``
-    console.log(" USER:", AttendanceId);
-    console.log(" BODY:", month);
-    return this.financeService.findAllPayroll(AttendanceId, month, year);
-  }
+ @Get('payroll')
+@CheckAbilities({ action: Action.Read, subject: 'payroll' })
+findAllPayroll(
+  @Query('employeeId') employeeId: string, // Match with frontend
+  @Query('month') month?: number,
+  @Query('year') year?: number,
+) {
+  return this.financeService.findAllPayroll(employeeId, month, year);
+}
 
   @Post('expenses')
   @CheckAbilities({ action: Action.Create, subject: 'expense' })

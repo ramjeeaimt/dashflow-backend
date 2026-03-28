@@ -14,8 +14,16 @@ export class Leave {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  // @ManyToOne(() => Employee)
+  // @JoinColumn()
+  // employee: Employee;
+
+  // @Column()
+  // employeeId: string;
+
+  // Is line ko update karo -> @JoinColumn({ name: 'employeeId' })
   @ManyToOne(() => Employee)
-  @JoinColumn()
+  @JoinColumn({ name: 'employeeId' }) 
   employee: Employee;
 
   @Column()

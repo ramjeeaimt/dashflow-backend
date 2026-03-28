@@ -6,11 +6,13 @@ import {
   UpdateDateColumn,
   ManyToOne,
   JoinColumn,
+  OneToMany,
 } from 'typeorm';
 import { User } from '../users/user.entity';
 import { Company } from '../companies/company.entity';
 import { Department } from '../departments/department.entity';
 import { Designation } from '../designations/designation.entity';
+import { Leave } from '../leaves/leave.entity';
 
 @Entity()
 export class Employee {
@@ -24,6 +26,9 @@ export class Employee {
   @Column()
   userId: string;
 
+  @OneToMany(() => Leave, (leave) => leave.employee)
+  leaves: Leave[];
+
   @Column({ unique: true, nullable: true })
   employeeCode: string;
 
@@ -32,6 +37,10 @@ export class Employee {
 
   @Column({ nullable: true })
   companyId: string;
+  
+  @ManyToOne(() => Employee)
+@JoinColumn()
+employee: Employee;
 
   @ManyToOne(() => Department, { nullable: true })
   @JoinColumn()

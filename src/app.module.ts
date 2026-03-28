@@ -21,7 +21,7 @@ import { LeavesModule } from './modules/leaves/leaves.module';
 import { Leave } from './modules/leaves/leave.entity';
 import { DesignationModule } from './modules/designations/designation.module';
 import { Designation } from './modules/designations/designation.entity';
-import { Client } from './modules/projects/entities/client.entity';
+
 import { Project } from './modules/projects/entities/project.entity';
 import { Task } from './modules/projects/entities/task.entity';
 import { Payroll } from './modules/finance/entities/payroll.entity';
@@ -39,7 +39,11 @@ import { FcmToken } from './modules/notifications/entities/fcm-token.entity';
 import { DashboardController } from './modules/dashboard/dashboard.controller';
 import { AllProject } from './modules/project/project.entity';
 import { AllProjectModule } from './modules/project/project.module';
+import { ClientsModule } from './modules/clients/clients.module';
+import { Client as CRMClient} from './modules/clients/client.entity';
 // import { UploadModule } from './modules/upload/upload.module';
+import { Client  } from './modules/projects/entities/client.entity';
+import { Invoice } from './modules/invoices/invoice.entity';
 
 @Module({
   imports: [
@@ -89,6 +93,8 @@ import { AllProjectModule } from './modules/project/project.module';
           AllProject,
           Notification,
           FcmToken,
+         CRMClient,
+         Invoice,
         ];
         if (dbUrl) {
           return {
@@ -132,6 +138,7 @@ import { AllProjectModule } from './modules/project/project.module';
     TimeTrackingModule,
     AllProjectModule,
     NotificationsModule,
+    ClientsModule,
     // UploadModule,
   ],
 
