@@ -21,7 +21,7 @@ export class AttendanceService {
   // Office coordinates: 26.8604896, 81.0200511
   private readonly OFFICE_LAT = 26.8604896;
   private readonly OFFICE_LNG = 81.0200511;
-  private readonly MAX_DISTANCE_METERS = 10000;
+  private readonly MAX_DISTANCE_METERS = 100;
 
   constructor(
     @InjectRepository(Attendance)

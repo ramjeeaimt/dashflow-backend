@@ -19,7 +19,7 @@ export class CreateLeaveDto {
 
   @IsString()
   @IsOptional()
-  adminComment?: string
+  adminComment?: string;
 
   @IsNotEmpty()
   @IsString()
@@ -34,4 +34,8 @@ export class UpdateLeaveStatusDto {
   @IsNotEmpty()
   @IsEnum(['PENDING', 'APPROVED', 'REJECTED', 'pending', 'approved', 'rejected'])
   status: string;
+
+  @IsString()
+  @IsOptional()
+  adminComment?: string;
 }

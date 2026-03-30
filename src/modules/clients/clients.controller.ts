@@ -15,8 +15,11 @@ export class ClientsController {
     return this.clientsService.create(clientData);
   }
 
-  @Post(':id/send-invoice') // Ye invoice ke liye hai
-  sendInvoice(@Param('id') id: string, @Body('amount') amount: number) {
-    return this.clientsService.sendInvoice(id, amount);
+  @Post(':id/send-invoice')
+  async sendInvoice(
+    @Param('id') id: string,
+    @Body() invoiceData: any, // Frontend se pura object aa raha hai
+  ) {
+    return this.clientsService.sendInvoice(id, invoiceData);
   }
 }

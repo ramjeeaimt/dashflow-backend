@@ -46,14 +46,18 @@ export class LeavesService {
     return leave;
   }
 
-  async updateStatus(
-    id: string,
-    updateLeaveStatusDto: UpdateLeaveStatusDto,
-  ): Promise<Leave> {
+ // NestJS Service update
+async updateStatus(id: string, updateLeaveStatusDto: UpdateLeaveStatusDto) {
     const leave = await this.findOne(id);
     leave.status = updateLeaveStatusDto.status;
+    
+    // 👇 Ye line add karo warna comment DB mein nahi jayega
+    if (updateLeaveStatusDto.adminComment) {
+        leave.adminComment = updateLeaveStatusDto.adminComment;
+    }
+    
     return this.leavesRepository.save(leave);
-  }
+}
 
   async isEmployeeOnLeave(employeeId: string, date: string): Promise<boolean> {
     const leave = await this.leavesRepository.findOne({

@@ -8,6 +8,7 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { Employee } from '../employees/employee.entity';
+import { IsOptional, IsString } from 'class-validator';
 
 @Entity()
 export class Leave {
@@ -23,7 +24,7 @@ export class Leave {
 
   // Is line ko update karo -> @JoinColumn({ name: 'employeeId' })
   @ManyToOne(() => Employee)
-  @JoinColumn({ name: 'employeeId' }) 
+  @JoinColumn({ name: 'employeeId' })
   employee: Employee;
 
   @Column()
@@ -43,6 +44,10 @@ export class Leave {
 
   @Column()
   type: string; // sick, casual, earned, etc.
+
+  @IsString()
+  @IsOptional()
+  adminComment?: string;
 
   @CreateDateColumn()
   createdAt: Date;

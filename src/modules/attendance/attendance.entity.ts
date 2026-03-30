@@ -40,9 +40,10 @@ export class Attendance {
 
   @Column({
     type: 'enum',
-    enum: ['present', 'absent', 'leave', 'half-day'],
+    enum: ['present', 'absent', 'leave', 'half-day','early_departure',''],
     default: 'present'
   })
+  
   status: string;
 
   @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
