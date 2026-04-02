@@ -37,6 +37,8 @@ export class Project {
   @Column({ nullable: true })
   contactInfo: string;
 
+  
+
   // Timeline
   @Column({ nullable: true, type: 'date' })
   assigningDate: Date;

@@ -1,6 +1,6 @@
-import { Controller, Get, Post, Body, Param, BadRequestException, Request, UseGuards } from '@nestjs/common';
-import { ClientsService } from './clients.service';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { BadRequestException, Body, Controller, Get, Param, Post, Request, UseGuards } from "@nestjs/common";
+import { JwtAuthGuard } from "../auth/jwt-auth.guard";
+import { ClientsService } from "./clients.service";
 
 @Controller('api/clients')
 export class ClientsController {
@@ -11,26 +11,23 @@ export class ClientsController {
     return this.clientsService.findAll();
   }
 
-  @Post() // Ye naye client ke liye hai
-  createClient(@Body() clientData: any) {
-    return this.clientsService.create(clientData);
-  }
-@UseGuards(JwtAuthGuard)
- @Post(':id/send-invoice')
-async sendInvoice(
-  @Param('id') id: string,
-  @Body() invoiceData: any, 
-  @Request() req: any 
-) {
-  // 1. Extract companyId from the authenticated user
-  // (Usually attached by your AuthGuard/JWT Strategy)
-  const companyId = req.user?.companyId || req.user?.company?.id;
-
-  if (!companyId) {
-    throw new BadRequestException('Company context not found for this user');
+  @Post()
+  async createClient(@Body() clientData: any) {
+    // clientData mein ab name, email, phone, city, budget sab aayega
+    return await this.clientsService.create(clientData);
   }
 
-  // 2. Pass all THREE arguments to the service
-  return this.clientsService.sendInvoice(id, invoiceData, companyId);
-}
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/send-invoice')
+  async sendInvoice(
+    @Param('id') id: string,
+    @Body() invoiceData: any, 
+    @Request() req: any 
+  ) {
+    const companyId = req.user?.companyId || req.user?.company?.id;
+    if (!companyId) {
+      throw new BadRequestException('Company context not found');
+    }
+    return this.clientsService.sendInvoice(id, invoiceData, companyId);
+  }
 }

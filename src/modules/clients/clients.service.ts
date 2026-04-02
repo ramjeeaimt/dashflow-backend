@@ -44,9 +44,9 @@ export class ClientsService implements OnModuleInit {
   async onModuleInit() {
     try {
       await this.transporter.verify();
-      console.log('🚀 DIFMO Billing System: SMTP Verified & Ready');
+      console.log(' DIFMO Billing System: SMTP Verified & Ready');
     } catch (err) {
-      console.error('❌ Billing System SMTP Failure:', err.message);
+      console.error(' Billing System SMTP Failure:', err.message);
     }
   }
 
@@ -54,6 +54,30 @@ export class ClientsService implements OnModuleInit {
   //         CLIENT MANAGEMENT METHODS
   // ==========================================
 
+  async create(clientData: Partial<Client>): Promise<Client> {
+    try {
+      // const existing = await this.clientRepo.findOne({ where: { email: clientData.email } });
+      // if (existing) {
+      //   throw new ConflictException('A client with this email already exists');
+      // }
+      
+      
+      // Creating new entity instance with all form fields
+      const newClient = this.clientRepo.create({
+        ...clientData,
+        // Ensure budget is a number if it comes as a string from frontend
+        budget: clientData.budget ? Number(clientData.budget) : 0,
+        createdAt: new Date()
+      });
+
+      return await this.clientRepo.save(newClient);
+    } catch (error) {
+      if (error instanceof ConflictException) throw error;
+      throw new InternalServerErrorException('Error saving client to database');
+    }
+  }
+
+  // FIND ALL: Client list fetch karte waqt invoices bhi load honge
   async findAll(): Promise<Client[]> {
     try {
       return await this.clientRepo.find({
@@ -65,6 +89,9 @@ export class ClientsService implements OnModuleInit {
     }
   }
 
+
+  
+
   async findOne(id: string): Promise<Client> {
     const client = await this.clientRepo.findOne({
       where: { id },
@@ -74,13 +101,13 @@ export class ClientsService implements OnModuleInit {
     return client;
   }
 
-  async create(clientData: Partial<Client>): Promise<Client> {
-    const existing = await this.clientRepo.findOne({ where: { email: clientData.email } });
-    if (existing) throw new ConflictException('A client with this email already exists');
+  // async create(clientData: Partial<Client>): Promise<Client> {
+  //   const existing = await this.clientRepo.findOne({ where: { email: clientData.email } });
+  //   if (existing) throw new ConflictException('A client with this email already exists');
     
-    const newClient = this.clientRepo.create(clientData);
-    return await this.clientRepo.save(newClient);
-  }
+  //   const newClient = this.clientRepo.create(clientData);
+  //   return await this.clientRepo.save(newClient);
+  // }
 
   async update(id: string, updateData: Partial<Client>): Promise<Client> {
     const client = await this.findOne(id);
