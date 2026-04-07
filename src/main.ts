@@ -8,13 +8,13 @@ async function bootstrap() {
 
   app.useGlobalInterceptors(new TransformInterceptor());
 
-  // ✅ ADD THIS
-  app.enableCors({
-    origin: "https://difmo-crm-frontend.vercel.app",
-    credentials: true,
-    methods: "GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS",
-    allowedHeaders: "Content-Type, Authorization",
-  });
+  // // ✅ ADD THIS
+  // app.enableCors({
+  //   origin: "https://difmo-crm-frontend.vercel.app",
+  //   credentials: true,
+  //   methods: "GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS",
+  //   allowedHeaders: "Content-Type, Authorization",
+  // });
 
   setupApp(app);
 
