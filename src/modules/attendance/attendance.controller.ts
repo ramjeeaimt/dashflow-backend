@@ -68,7 +68,7 @@ export class AttendanceController {
   async getAnalytics(@Query() query: any) {
     return this.attendanceService.getAnalytics(query);
   }
-
+//by id
   @Get(':id')
   @CheckAbilities({ action: Action.Read, subject: 'attendance' })
   async findOne(@Param('id') id: string) {
