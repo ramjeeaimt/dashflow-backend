@@ -103,7 +103,7 @@ export class EmployeeService {
           context: {
             name: `${createEmployeeDto.firstName} ${createEmployeeDto.lastName}`,
             companyName: company?.name || 'Our Company',
-            loginUrl: 'http://localhost:5173/login',
+            loginUrl: 'https://difmo-crm-frontend.vercel.app/login',
             year: new Date().getFullYear(),
           },
         }).catch(err => {
