@@ -18,7 +18,7 @@ export class AuthController {
     private authService: AuthService,
     private userService: UserService,
   ) {}
-
+//login endpoint that validates the user's credentials and returns a JWT token if valid. It uses the AuthService to perform the validation and token generation. If the credentials are invalid, it throws an UnauthorizedException.
   @Post('login')
   async login(@Body() req) {
     const user = await this.authService.validateUser(req.email, req.password);
