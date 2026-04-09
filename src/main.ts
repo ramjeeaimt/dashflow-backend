@@ -8,16 +8,6 @@ async function bootstrap() {
 
   app.useGlobalInterceptors(new TransformInterceptor());
 
-  // ✅ ADD THIS
-  app.enableCors({
-    origin: [
-      "https://difmo-crm-frontend.vercel.app",
-      "http://localhost:5173" // ✅ local frontend
-    ],
-    credentials: true,
-    methods: "GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS",
-    allowedHeaders: "Content-Type, Authorization",
-  });
 
   setupApp(app);
 
