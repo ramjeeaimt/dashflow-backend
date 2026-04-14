@@ -7,13 +7,16 @@ import {
   ManyToOne,
   ManyToMany,
   JoinTable,
+  BeforeInsert,
+  BeforeUpdate,
 } from 'typeorm';
+import * as bcrypt from 'bcryptjs';
 import { Company } from '../companies/company.entity';
 import { Department } from '../departments/department.entity';
 import { Role } from '../access-control/role.entity';
 import { Permission } from '../access-control/permission.entity';
 
-@Entity()
+@Entity('user')
 export class User {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -51,6 +54,14 @@ export class User {
   @ManyToMany(() => Permission)
   @JoinTable()
   permissions: Permission[];
+
+  @BeforeInsert()
+  @BeforeUpdate()
+  async hashPassword() {
+    if (this.password && !this.password.startsWith('$2a$') && !this.password.startsWith('$2b$')) {
+      this.password = await bcrypt.hash(this.password, 10);
+    }
+  }
 
   @CreateDateColumn()
   createdAt: Date;

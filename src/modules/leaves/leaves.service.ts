@@ -106,6 +106,13 @@ export class LeavesService {
       query.andWhere('leave.status = :status', { status: filters.status });
     }
 
+    if (filters?.startDate && filters?.endDate) {
+      query.andWhere(
+        '(leave.startDate <= :endDate AND leave.endDate >= :startDate)',
+        { startDate: filters.startDate, endDate: filters.endDate }
+      );
+    }
+
     return query.getMany();
   }
 

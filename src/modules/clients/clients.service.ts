@@ -72,8 +72,9 @@ export class ClientsService implements OnModuleInit {
 
       return await this.clientRepo.save(newClient);
     } catch (error) {
+      console.error('[ClientsService] Create Client Error:', error);
       if (error instanceof ConflictException) throw error;
-      throw new InternalServerErrorException('Error saving client to database');
+      throw new InternalServerErrorException(`Error saving client to database: ${error.message}`);
     }
   }
 
@@ -366,10 +367,14 @@ export class ClientsService implements OnModuleInit {
   // ==========================================
   //      CORE ACTION: DISPATCH INVOICE
   // ==========================================
-
-  async sendInvoice(clientId: string, invoiceData: any, companyId: string) {
+  async sendInvoice(clientId: string, companyId: string, invoiceData: any) {
+    console.log(`[ClientsService] Initiate sendInvoice for client: ${clientId}, company: ${companyId}`);
     const client = await this.clientRepo.findOneBy({ id: clientId });
-    if (!client) throw new NotFoundException('Client reference missing');
+    if (!client) {
+      console.error(`[ClientsService] Client NOT FOUND: ${clientId}`);
+      throw new NotFoundException('Client reference missing');
+    }
+    console.log(`[ClientsService] Resolved Client Email: ${client.email}`);
 
     // FETCH THE DYNAMIC DETAILS FROM DATABASE
     const companyDocs = await this.gstService.findOne(companyId);
@@ -389,16 +394,20 @@ export class ClientsService implements OnModuleInit {
     const savedInvoice = await this.invoiceRepo.save(invoice);
 
     try {
+      console.log(`[ClientsService] Generating PDF for Invoice #${savedInvoice.invoiceNumber}`);
       const pdfBuffer = await this.generateInvoicePdf(
         client, 
         savedInvoice, 
         items, 
         baseAmount, 
-        companyDocs, // DYNAMIC DATA FROM GST STORE
+        companyDocs, 
         currencySymbol
       );
+      console.log(`[ClientsService] PDF Generated, size: ${pdfBuffer.length} bytes`);
 
-      await this.transporter.sendMail({
+      console.log(`[ClientsService] Dispatching email to: ${client.email} from: ramjeekumaryadav733@gmail.com`);
+      
+      const info = await this.transporter.sendMail({
         from: '"DIFMO Billing Team" <ramjeekumaryadav733@gmail.com>',
         to: client.email,
         subject: `ACTION REQUIRED: Invoice #${savedInvoice.invoiceNumber} for ${client.name}`,
@@ -449,9 +458,14 @@ export class ClientsService implements OnModuleInit {
         }],
       });
 
+      console.log(`[ClientsService] Email Success! MessageId: ${info.messageId}`);
+      console.log(`[ClientsService] Full SMTP Response: ${JSON.stringify(info)}`);
+
       return savedInvoice;
     } catch (e) {
-      console.error("Critical Mailer Error:", e.message);
+      console.error("[ClientsService] CRITICAL MAILER ERROR:", e);
+      console.error("[ClientsService] Error Message:", e.message);
+      if (e.response) console.error("[ClientsService] SMTP Response:", e.response);
       throw new BadRequestException(`Invoice generated but email dispatch failed: ${e.message}`);
     }
   }

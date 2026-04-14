@@ -10,11 +10,23 @@ export function setupApp(app: INestApplication) {
   app.useGlobalInterceptors(new TransformInterceptor());
   app.useGlobalFilters(new HttpExceptionFilter());
   app.enableCors({
-    origin: [
-      'https://difmo-crm-frontend.vercel.app',
-      'http://localhost:5173',
-      'http://localhost:3000'
-    ],
+    origin: (origin, callback) => {
+      // Allow development origins, and any incoming origin if not in production
+      if (process.env.NODE_ENV !== 'production' || !origin) {
+        callback(null, true);
+        return;
+      }
+      const allowedOrigins = [
+        'https://difmo-crm-frontend.vercel.app',
+        'http://localhost:5173',
+        'http://localhost:3000'
+      ];
+      if (allowedOrigins.indexOf(origin) !== -1) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
     allowedHeaders: 'Content-Type,Accept,Authorization',

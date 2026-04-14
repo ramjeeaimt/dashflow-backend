@@ -21,11 +21,23 @@ export class AuthController {
 //login endpoint that validates the user's credentials and returns a JWT token if valid. It uses the AuthService to perform the validation and token generation. If the credentials are invalid, it throws an UnauthorizedException.
   @Post('login')
   async login(@Body() req) {
-    const user = await this.authService.validateUser(req.email, req.password);
-    if (!user) {
-      throw new UnauthorizedException('Invalid credentials');
+    const startTime = Date.now();
+    console.log(`[AuthFlow] Login attempt for: ${req.email}`);
+    
+    try {
+      const user = await this.authService.validateUser(req.email, req.password);
+      if (!user) {
+        console.warn(`[AuthFlow] Invalid credentials for: ${req.email} (Time: ${Date.now() - startTime}ms)`);
+        throw new UnauthorizedException('Invalid credentials');
+      }
+      
+      const response = await this.authService.login(user);
+      console.log(`[AuthFlow] Login SUCCESS for: ${req.email} (Time: ${Date.now() - startTime}ms)`);
+      return response;
+    } catch (error) {
+      console.error(`[AuthFlow] Login ERROR for: ${req.email}: ${error.message} (Time: ${Date.now() - startTime}ms)`);
+      throw error;
     }
-    return this.authService.login(user);
   }
 
 //register endpoint that allows new users to create an account. It accepts user details in the request body and uses the AuthService to create a new user record in the database. The implementation of the registration logic (e.g., hashing passwords, validating input) would be handled within the AuthService.

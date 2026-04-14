@@ -11,7 +11,7 @@ import {
 import { Employee } from '../employees/employee.entity';
 import { Payroll } from '../finance/entities/payroll.entity';
 
-@Entity()
+@Entity('attendance')
 export class Attendance {
   @PrimaryGeneratedColumn('uuid')
   id: string;

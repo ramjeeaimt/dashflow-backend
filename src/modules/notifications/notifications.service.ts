@@ -187,6 +187,17 @@ export class NotificationsService implements OnModuleInit {
                     <a href="${appUrl}/task-management" style="background-color: #4f46e5; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">View Task Details</a>
                 </div>
             `;
+        } else if (type === 'PROJECT_ASSIGNED') {
+            content = `
+                <div style="border: 1px solid #4f46e5; padding: 20px; border-radius: 8px; margin: 20px 0; background-color: #f5f3ff;">
+                    <h3 style="margin: 0; color: #4f46e5;">New Project: ${metadata.projectName || title}</h3>
+                    <p style="color: #4b5563; margin-top: 10px;">${message}</p>
+                    ${metadata.deadline ? `<p style="font-size: 13px; color: #6b7280;"><strong>Deadline:</strong> ${metadata.deadline}</p>` : ''}
+                </div>
+                <div style="margin-top: 20px; text-align: center;">
+                    <a href="${appUrl}/projects" style="background-color: #4f46e5; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">View My Projects</a>
+                </div>
+            `;
         }
 
         return `
@@ -283,11 +294,13 @@ export class NotificationsService implements OnModuleInit {
     }
 
     // ─── Unified Send Method (Firestore + Email + Socket) ────────────────────────
-
     async send(dto: SendNotificationDto): Promise<Notification> {
+        this.logger.log(`NotificationsService.send called with type: ${dto.type}, recipients count: ${dto.recipientIds?.length || 0}`);
         const { emails, userIds } = await this.resolveRecipients(dto);
+        this.logger.log(`Resolved: ${emails.length} emails, ${userIds.length} userIds`);
 
         if (!emails.length && !userIds.length) {
+            this.logger.warn(`No recipients found for filter: ${dto.recipientFilter}`);
             throw new BadRequestException('No recipients found for the selected filter.');
         }
 
@@ -310,7 +323,13 @@ export class NotificationsService implements OnModuleInit {
 
         // 3. Nodemailer Email Alerts
         if (dto.type === 'email' || dto.type === 'both') {
-            await this.sendEmails(emails, dto.title, dto.message, dto.metadata);
+            this.logger.log(`Attempting to send emails to: ${emails.join(', ')}`);
+            try {
+                const results = await this.sendEmails(emails, dto.title, dto.message, dto.metadata);
+                this.logger.log(`Email send results: Success=${results.success}, Failure=${results.failure}`);
+            } catch (err) {
+                throw err;
+            }
         }
 
         // 4. Instant Socket.io Toast (Optional background feedback)

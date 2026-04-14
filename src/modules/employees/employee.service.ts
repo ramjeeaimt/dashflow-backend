@@ -101,7 +101,7 @@ export class EmployeeService {
         await this.mailerService.sendMail({
           to: createEmployeeDto.email,
           subject: `Welcome to ${company?.name || 'the Team'}!`,
-          template: './welcome',
+          template: 'welcome',
           context: {
             name: `${createEmployeeDto.firstName} ${createEmployeeDto.lastName}`,
             companyName: company?.name || 'Our Company',

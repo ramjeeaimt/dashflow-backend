@@ -33,21 +33,18 @@ export class DashboardService {
     let attendanceTodayPromise;
     let tasksPromise;
 
+    // Always fetch company-wide attendance for the "Present Today" count
+    attendanceTodayPromise = this.attendanceService.findAll({
+        companyId,
+        startDate: today,
+        endDate: today,
+    });
+
     if (userId) {
-        employeesPromise = this.employeeService.findAll({ companyId }); // still need total count maybe? or just 1?
-        attendanceTodayPromise = this.attendanceService.findAll({ 
-            userId, // Assuming attendance service can filter by userId
-            startDate: today,
-            endDate: today 
-        });
-        tasksPromise = this.projectsService.findAllTasksByCompany(companyId); // we'll filter below
+        employeesPromise = this.employeeService.findAll({ companyId });
+        tasksPromise = this.projectsService.findAllTasksByCompany(companyId);
     } else {
         employeesPromise = this.employeeService.findAll({ companyId });
-        attendanceTodayPromise = this.attendanceService.findAll({
-            companyId,
-            startDate: today,
-            endDate: today,
-        });
         tasksPromise = this.projectsService.findAllTasksByCompany(companyId);
     }
 
@@ -66,9 +63,23 @@ export class DashboardService {
     const totalTasks = displayTasks.length;
     const productivityScore = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
 
+    const attendanceBreakdown = {
+      early: attendanceToday.filter(a => a.status === 'early_checkin').length,
+      late: attendanceToday.filter(a => a.status === 'late').length,
+      onTime: attendanceToday.filter(a => ['present', 'half-day', 'early_departure'].includes(a.status)).length,
+    };
+
+    // Calculate individual status if userId is provided
+    let userAttendance = null;
+    if (userId) {
+        userAttendance = attendanceToday.find(a => a.employee?.userId === userId || a.employeeId === userId);
+    }
+
     return {
       totalEmployees: employees.length,
-      presentToday: userId ? (attendanceToday.length > 0 ? 1 : 0) : attendanceToday.length,
+      presentToday: attendanceToday.length,
+      attendanceBreakdown,
+      userStatus: userAttendance ? (userAttendance as any).status : 'absent',
       tasksCompleted: completedTasks,
       avgProductivity: productivityScore, 
     };
@@ -186,6 +197,7 @@ export class DashboardService {
       totalPayroll: Math.round(summary.totalPayroll),
       totalExpenses: Math.round(summary.totalExpenses),
       turnover: Math.round(summary.turnover),
+      netProfit: Math.round(summary.turnover - summary.grandTotalOutgoing),
       currency: summary.currency,
       outgoingTotal: Math.round(summary.grandTotalOutgoing),
     };

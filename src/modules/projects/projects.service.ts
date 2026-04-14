@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { Client } from './entities/client.entity';
 import { Project } from './entities/project.entity';
 import { Task } from './entities/task.entity';
@@ -32,7 +32,50 @@ export class ProjectsService {
 
   // Projects
   async createProject(data: Partial<Project>): Promise<Project> {
-    return this.projectRepository.save(this.projectRepository.create(data));
+    // Sanitize dates: convert empty strings to null/undefined
+    if ((data as any).assigningDate === '' || (typeof data.assigningDate === 'string' && (data.assigningDate as string).trim() === '')) {
+      data.assigningDate = undefined;
+    }
+    if ((data as any).deadline === '' || (typeof data.deadline === 'string' && (data.deadline as string).trim() === '')) {
+      data.deadline = undefined;
+    }
+
+    const project = await this.projectRepository.save(this.projectRepository.create(data));
+
+    // Send notifications to assigned employees
+    if (project.assignedPeople && project.assignedPeople.length > 0) {
+      try {
+        const employees = await this.employeeRepository.find({
+          where: { id: In(project.assignedPeople) },
+          relations: ['user']
+        });
+
+        const recipientIds = employees.map(emp => emp.userId).filter(Boolean);
+        const recipientEmails = employees.map(emp => emp.user?.email).filter(Boolean);
+
+        if (recipientIds.length > 0) {
+          await this.notificationsService.send({
+            title: 'New Project Assignment',
+            message: `You have been assigned to a new project: ${project.projectName}.`,
+            type: 'both',
+            recipientFilter: 'custom',
+            recipientIds,
+            recipientEmails,
+            companyId: project.companyId,
+            metadata: {
+              type: 'PROJECT_ASSIGNED',
+              projectId: project.id,
+              projectName: project.projectName,
+              deadline: project.deadline
+            }
+          });
+        }
+      } catch (err) {
+        console.error('[ProjectsService] Failed to notify assigned employees:', err.message);
+      }
+    }
+
+    return project;
   }
 
   async findAllProjects(companyId: string): Promise<Project[]> {

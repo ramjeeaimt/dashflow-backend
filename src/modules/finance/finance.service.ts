@@ -56,7 +56,35 @@ export class FinanceService {
 
   // Payroll
   async createPayroll(data: Partial<Payroll>): Promise<Payroll> {
-    return this.payrollRepository.save(this.payrollRepository.create(data));
+    const payroll = await this.payrollRepository.save(this.payrollRepository.create(data));
+    
+    // 🔥 Real-time Notification to Employee on Creation
+    try {
+      const emp = await this.employeeRepository.findOne({
+        where: { id: payroll.employeeId },
+        relations: ['user']
+      });
+      if (emp && emp.userId) {
+        await this.notificationsService.send({
+          title: 'Payroll Slip Generated',
+          message: `Your payroll for ${payroll.month}/${payroll.year} has been generated. Net Salary: ₹${Number(payroll.netSalary).toFixed(2)}.`,
+          type: 'both',
+          recipientFilter: 'employees',
+          recipientIds: [emp.userId],
+          companyId: payroll.companyId,
+          metadata: {
+            type: 'PAYROLL_GENERATED',
+            month: payroll.month,
+            year: payroll.year,
+            netSalary: Number(payroll.netSalary)
+          }
+        });
+      }
+    } catch (err) {
+      console.error(`[FinanceService] Failed to notify employee on payroll creation:`, err.message);
+    }
+
+    return payroll;
   }
   //   async generatePayroll(data: Partial<Payroll>): Promise<Payroll> {
   //   return this.payrollRepository.save(this.payrollRepository.create(data));
@@ -452,14 +480,42 @@ async findAllPayroll(
 
   async markPayrollPaid(payrollId: string) {
     const payroll = await this.payrollRepository.findOne({
-      where: { id: payrollId }
+      where: { id: payrollId },
+      relations: ['employee']
     });
 
     if (!payroll) throw new NotFoundException('Payroll not found');
 
     payroll.status = 'paid';
+    const updated = await this.payrollRepository.save(payroll);
 
-    return this.payrollRepository.save(payroll);
+    // 🔥 Real-time Notification to Employee on Payment
+    try {
+      const emp = await this.employeeRepository.findOne({
+        where: { id: payroll.employeeId },
+        relations: ['user']
+      });
+      if (emp && emp.userId) {
+        await this.notificationsService.send({
+          title: 'Salary Disbursed',
+          message: `Your salary for ${payroll.month}/${payroll.year} has been marked as PAID. Amount: ₹${Number(payroll.netSalary).toFixed(2)}.`,
+          type: 'both',
+          recipientFilter: 'employees',
+          recipientIds: [emp.userId],
+          companyId: payroll.companyId,
+          metadata: {
+            type: 'PAYROLL_PAID',
+            month: payroll.month,
+            year: payroll.year,
+            netSalary: Number(payroll.netSalary)
+          }
+        });
+      }
+    } catch (err) {
+      console.error(`[FinanceService] Failed to notify employee on payroll payment:`, err.message);
+    }
+
+    return updated;
   }
 
   async findAllExpenses(companyId: string, targetCurrency: string = 'INR'): Promise<any[]> {
@@ -483,7 +539,7 @@ async findAllPayroll(
   }
 
   // turnover & summary
-  async getFinancialSummary(companyId: string, month?: number, year?: number, targetCurrency: string = 'USD') {
+  async getFinancialSummary(companyId: string, month?: number, year?: number, targetCurrency: string = 'INR') {
     const where: any = { companyId };
 
     let expenses = await this.expenseRepository.find({ where });

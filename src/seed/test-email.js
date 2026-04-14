@@ -1,34 +1,44 @@
-require('dotenv').config();
+const { Client } = require('pg');
 const nodemailer = require('nodemailer');
+const dotenv = require('dotenv');
+const path = require('path');
 
-async function sendTest() {
-  const host = process.env.MAIL_HOST || 'smtp.gmail.com';
-  const port = Number(process.env.MAIL_PORT || 465);
-  const user = process.env.MAIL_USER || 'test@example.com';
-  const pass = process.env.MAIL_PASS || 'password';
-  const to = process.env.MAIL_TEST_TO || user;
+dotenv.config({ path: path.join(__dirname, '..', '..', '.env') });
 
+async function testEmail() {
   const transporter = nodemailer.createTransport({
-    host,
-    port,
-    secure: port === 465,
-    auth: { user, pass },
-    tls: { rejectUnauthorized: false }
+    host: process.env.MAIL_HOST || 'smtp.gmail.com',
+    port: parseInt(process.env.MAIL_PORT) || 465,
+    secure: true,
+    auth: {
+      user: process.env.MAIL_USER,
+      pass: process.env.MAIL_PASS,
+    },
+    tls: {
+        rejectUnauthorized: false
+    }
   });
 
+  const mailOptions = {
+    from: `"Difmo CRM Test" <${process.env.MAIL_USER}>`,
+    to: 'ramjeekumaryadav558@gmail.com',
+    subject: 'Difmo CRM Notification Test',
+    text: 'If you receive this, the SMTP configuration for Difmo CRM is working correctly.',
+    html: '<b>If you receive this, the SMTP configuration for Difmo CRM is working correctly.</b>'
+  };
+
   try {
-    await transporter.verify();
-    console.log('SMTP connection ok. Sending test email to', to);
-    const info = await transporter.sendMail({
-      from: user,
-      to,
-      subject: 'Test Email from Difmo CRM',
-      text: 'This is a test email to verify SMTP configuration.'
-    });
-    console.log('Email sent:', info.response || info.messageId);
-  } catch (err) {
-    console.error('Failed to send test email:', err);
+    console.log('Sending test email to ramjeekumaryadav558@gmail.com...');
+    console.log('Using SMTP User:', process.env.MAIL_USER);
+    const info = await transporter.sendMail(mailOptions);
+    console.log('Message sent: %s', info.messageId);
+    console.log('Preview URL: %s', nodemailer.getTestMessageUrl(info));
+  } catch (error) {
+    console.error('Error occurred:', error.message);
+    if (error.code === 'EAUTH') {
+        console.error('Authentication failed. Please check MAIL_USER and MAIL_PASS (App Password).');
+    }
   }
 }
 
-sendTest();
+testEmail();

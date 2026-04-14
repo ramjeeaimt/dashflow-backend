@@ -20,9 +20,9 @@ import { NotificationsService } from '../notifications/notifications.service';
 @Injectable()
 export class AttendanceService {
   // Office coordinates: 26.8604896, 81.0200511
-  private readonly OFFICE_LAT = 26.8604896;
-  private readonly OFFICE_LNG = 81.0200511;
-  private readonly MAX_DISTANCE_METERS = 300;
+  private readonly OFFICE_LAT = 26.861150;
+  private readonly OFFICE_LNG = 81.017587;
+  private readonly MAX_DISTANCE_METERS = 350;
 
   constructor(
     @InjectRepository(Attendance)
@@ -370,8 +370,8 @@ export class AttendanceService {
       });
     }
 
-    if (filters?.employeeId) {
-      let targetEmployeeId = filters.employeeId;
+    if (filters?.employeeId || filters?.userId) {
+      let targetEmployeeId = filters.employeeId || filters.userId;
       const employee = await this.employeeService.findByUserId(targetEmployeeId);
       if (employee) {
         targetEmployeeId = employee.id;

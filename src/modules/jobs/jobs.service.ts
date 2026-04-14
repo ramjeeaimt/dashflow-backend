@@ -37,14 +37,30 @@ export class JobsService {
     return this.appsRepo.save(app);
   }
 
-  listApplications(filter?: any) {
+  async listApplications(filter?: any) {
+    const page = parseInt(filter?.page) || 1;
+    const limit = parseInt(filter?.limit) || 10;
+    const skip = (page - 1) * limit;
+
     const qb = this.appsRepo.createQueryBuilder('app')
       .leftJoinAndSelect('app.job', 'job')
       .orderBy('app.createdAt', 'DESC');
     
     if (filter?.jobId) qb.andWhere('app.jobId = :jobId', { jobId: filter.jobId });
-    if (filter?.status) qb.andWhere('app.status = :status', { status: filter.status });
-    return qb.getMany();
+    if (filter?.status && filter?.status !== 'ALL') qb.andWhere('UPPER(app.status) = :status', { status: filter.status.toUpperCase() });
+
+    const [applications, total] = await qb
+      .skip(skip)
+      .take(limit)
+      .getManyAndCount();
+
+    return {
+      applications,
+      total,
+      page,
+      limit,
+      pages: Math.ceil(total / limit),
+    };
   }
 
   async updateApplicationStatus(id: string, status: string) {

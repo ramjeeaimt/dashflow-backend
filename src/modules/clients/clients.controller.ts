@@ -45,6 +45,6 @@ export class ClientsController {
     if (!companyId) {
       throw new BadRequestException('Company context not found');
     }
-    return this.clientsService.sendInvoice(id, invoiceData, companyId);
+    return this.clientsService.sendInvoice(id, companyId, invoiceData);
   }
 }
