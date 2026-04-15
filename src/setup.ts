@@ -17,11 +17,13 @@ export function setupApp(app: INestApplication) {
         return;
       }
       const allowedOrigins = [
-        'https://difmo-crm-frontend.vercel.app',
-        'http://localhost:5173',
-        'http://localhost:3000'
+        'vercel.app',
+        'localhost:5173',
+        'localhost:3000'
       ];
-      if (allowedOrigins.indexOf(origin) !== -1) {
+      const isAllowed = allowedOrigins.some(domain => origin.includes(domain));
+      
+      if (isAllowed) {
         callback(null, true);
       } else {
         callback(new Error('Not allowed by CORS'));

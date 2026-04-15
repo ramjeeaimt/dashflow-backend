@@ -66,9 +66,9 @@ import { JobMessage } from './modules/jobs/entities/message.entity';
 
         let dbUrl: string | undefined;
         if (env === 'production') {
-          dbUrl = configService.get<string>('DATABASE_URL_PROD');
+          dbUrl = configService.get<string>('DATABASE_URL_PROD') || configService.get<string>('DATABASE_URL');
         } else if (env === 'development') {
-          dbUrl = configService.get<string>('DATABASE_URL_STAGING');
+          dbUrl = configService.get<string>('DATABASE_URL_STAGING') || configService.get<string>('DATABASE_URL');
         }
         // if (!dbUrl) {
         //   dbUrl = configService.get<string>('DATABASE_URL');

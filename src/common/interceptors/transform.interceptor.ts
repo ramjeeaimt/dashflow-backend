@@ -32,24 +32,12 @@ export class TransformInterceptor<T>
     const startTime = Date.now();
 
     // Log Request
-    this.logger.log(
-      `Incoming Request: ${method} ${originalUrl} 
-       Body: ${JSON.stringify(body)} 
-       Params: ${JSON.stringify(params)} 
-       Query: ${JSON.stringify(query)}`
-    );
+    this.logger.log(`Incoming Request: ${method} ${originalUrl}`);
 
     return next.handle().pipe(
       tap((data) => {
         const responseTime = Date.now() - startTime;
-
-        // Log Response
-        this.logger.log(
-          `Response: ${method} ${originalUrl} 
-           Status: ${response.statusCode} 
-           Time: ${responseTime}ms 
-           Data: ${JSON.stringify(data)}`
-        );
+        this.logger.log(`Response: ${method} ${originalUrl} [${response.statusCode}] ${responseTime}ms`);
       }),
       map((data) => ({
         data,
