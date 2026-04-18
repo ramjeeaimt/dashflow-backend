@@ -21,10 +21,11 @@ export default async (req, res) => {
     'http://localhost:3000'
   ];
 
+  const origin = req.headers.origin;
   const isAllowed = !origin || allowedOrigins.includes(origin) || (origin.endsWith('.vercel.app'));
 
-  if (isAllowed) {
-    res.setHeader('Access-Control-Allow-Origin', origin || '*');
+  if (isAllowed && origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
   } else {
     res.setHeader('Access-Control-Allow-Origin', 'https://difmo-crm-frontend.vercel.app');
   }
