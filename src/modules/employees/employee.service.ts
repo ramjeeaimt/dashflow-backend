@@ -9,6 +9,7 @@ import { UserService } from '../users/user.service';
 import { MailerService } from '@nestjs-modules/mailer';
 import { Company } from '../companies/company.entity';
 import { NotificationsService } from '../notifications/notifications.service';
+import { MailService } from '../mail/mail.service';
 
 @Injectable()
 export class EmployeeService {
@@ -20,6 +21,7 @@ export class EmployeeService {
     private userService: UserService,
     private mailerService: MailerService,
     private notificationsService: NotificationsService,
+    private mailService: MailService,
   ) { }
 
   async create(
@@ -362,6 +364,16 @@ export class EmployeeService {
           }
           if (roleIds || permissionIds) {
             await this.userService.saveUser(user);
+
+            // Trigger role-assignment notification if roles were changed
+            if (roleIds && user.email) {
+              const roleNames = user.roles.map(r => r.name);
+              console.log(`[EmployeeService] Roles updated for ${user.email}. Sending notification...`);
+              await this.mailService.sendRoleAssignmentNotification(user.email, {
+                employeeName: `${user.firstName || ''} ${user.lastName || ''}`.trim(),
+                roles: roleNames
+              }).catch(err => console.error('[EmployeeService] Role notification failed:', err.message));
+            }
           }
         }
       }

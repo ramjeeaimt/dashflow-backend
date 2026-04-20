@@ -11,6 +11,7 @@ import { EmployeeModule } from '../employees/employee.module';
 import { AccessControlModule } from '../access-control/access-control.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { WFHRequestsModule } from '../wfh-requests/wfh-requests.module';
+import { MailModule } from '../mail/mail.module';
 
 
 @Module({
@@ -21,6 +22,7 @@ import { WFHRequestsModule } from '../wfh-requests/wfh-requests.module';
     AccessControlModule,
     NotificationsModule,
     WFHRequestsModule,
+    MailModule,
   ],
   controllers: [AttendanceController],
   providers: [AttendanceService],

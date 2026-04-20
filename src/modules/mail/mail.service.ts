@@ -47,4 +47,46 @@ export class MailService {
       },
     });
   }
+
+  async sendCheckInEmail(to: string, data: { employeeName: string; time: string; status: string; date: string }) {
+    await this.mailerService.sendMail({
+      to,
+      subject: `Check-in Recorded: ${data.employeeName} - ${data.date}`,
+      template: './check-in',
+      context: {
+        name: data.employeeName,
+        time: data.time,
+        status: data.status,
+        date: data.date,
+      },
+    });
+  }
+
+  async sendCheckOutEmail(to: string, data: { employeeName: string; time: string; date: string; workHours: number; overtime: number }) {
+    await this.mailerService.sendMail({
+      to,
+      subject: `Check-out Recorded: ${data.employeeName} - ${data.date}`,
+      template: './check-out',
+      context: {
+        name: data.employeeName,
+        time: data.time,
+        date: data.date,
+        workHours: data.workHours.toFixed(2),
+        overtime: data.overtime.toFixed(2),
+      },
+    });
+  }
+
+  async sendRoleAssignmentNotification(to: string, data: { employeeName: string; roles: string[] }) {
+    await this.mailerService.sendMail({
+      to,
+      subject: `Access Update: New Roles Assigned to ${data.employeeName}`,
+      template: './role-assigned',
+      context: {
+        name: data.employeeName,
+        roles: data.roles.join(', '),
+        year: new Date().getFullYear(),
+      },
+    });
+  }
 }

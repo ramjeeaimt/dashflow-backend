@@ -55,9 +55,50 @@ export class AuthService {
         company: user.company,
         role: user.roles?.[0]?.name || 'Employee',
         roles: user.roles,
-        permissions: user.permissions || [],
+        permissions: this.flattenPermissions(user),
       },
     };
+  }
+
+  private flattenPermissions(user: any) {
+    const permissions = new Set<string>();
+    const result: any[] = [];
+
+    // 1. Collect from roles
+    if (user.roles) {
+      user.roles.forEach((role: any) => {
+        if (role.permissions) {
+          role.permissions.forEach((perm: any) => {
+            const key = `${perm.action}:${perm.resource}`;
+            if (!permissions.has(key)) {
+              permissions.add(key);
+              result.push({
+                action: perm.action,
+                resource: perm.resource,
+                conditions: perm.conditions,
+              });
+            }
+          });
+        }
+      });
+    }
+
+    // 2. Collect from direct permissions
+    if (user.permissions) {
+      user.permissions.forEach((perm: any) => {
+        const key = `${perm.action}:${perm.resource}`;
+        if (!permissions.has(key)) {
+          permissions.add(key);
+          result.push({
+            action: perm.action,
+            resource: perm.resource,
+            conditions: perm.conditions,
+          });
+        }
+      });
+    }
+
+    return result;
   }
 
   async register(data: any) {

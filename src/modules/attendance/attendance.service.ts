@@ -17,6 +17,7 @@ import { EmployeeService } from '../employees/employee.service';
 import { Employee } from '../employees/employee.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { WFHRequestsService } from '../wfh-requests/wfh-requests.service';
+import { MailService } from '../mail/mail.service';
 
 
 @Injectable()
@@ -33,6 +34,7 @@ export class AttendanceService {
     private employeeService: EmployeeService,
     private notificationsService: NotificationsService,
     private wfhRequestsService: WFHRequestsService,
+    private mailService: MailService,
   ) { }
 
   private calculateDistance(
@@ -257,6 +259,18 @@ export class AttendanceService {
     try {
       const saved = await this.attendanceRepository.save(attendance);
       console.log('[AttendanceService] Success! ID:', saved.id);
+      
+      // Trigger Email Notification
+      const employee = await this.employeeService.findOne(saved.employeeId);
+      if (employee?.user?.email) {
+        this.mailService.sendCheckInEmail(employee.user.email, {
+          employeeName: `${employee.user.firstName} ${employee.user.lastName}`,
+          time: saved.checkInTime,
+          status: saved.status,
+          date: today,
+        }).catch(err => console.error('[AttendanceService] Check-in email failed:', err));
+      }
+
       return saved;
     } catch (e) {
       console.error('[AttendanceService] Database save error:', e);
@@ -350,7 +364,20 @@ export class AttendanceService {
       attendance.notes = checkOutDto.notes;
     }
 
-    return this.attendanceRepository.save(attendance);
+    const saved = await this.attendanceRepository.save(attendance);
+
+    // Trigger Email Notification
+    if (employee?.user?.email) {
+      this.mailService.sendCheckOutEmail(employee.user.email, {
+        employeeName: `${employee.user.firstName} ${employee.user.lastName}`,
+        time: saved.checkOutTime,
+        date: saved.date as any,
+        workHours: saved.workHours || 0,
+        overtime: saved.overtime || 0,
+      }).catch(err => console.error('[AttendanceService] Check-out email failed:', err));
+    }
+
+    return saved;
   }
 
   async create(createAttendanceDto: CreateAttendanceDto): Promise<Attendance> {

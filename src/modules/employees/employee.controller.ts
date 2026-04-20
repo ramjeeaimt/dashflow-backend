@@ -58,12 +58,12 @@ export class EmployeeController {
   @Get()
   async findAll(@Query() query: any, @Request() req: any) {
     const user = req.user;
-    const isAdmin = user.roles?.some((role) =>
-      ['Super Admin', 'Admin'].includes(role.name),
+    const canViewAll = user.roles?.some((role) =>
+      ['super admin', 'admin', 'ceo', 'cfo', 'manager', 'hr'].includes(role.name.toLowerCase())
     );
 
-    // If not admin, they can ONLY read their own record
-    if (!isAdmin) {
+    // If not admin/management, they can ONLY read their own record
+    if (!canViewAll) {
       if (!query.userId || query.userId !== user.id) {
         throw new ForbiddenException('You can only access your own employee record.');
       }

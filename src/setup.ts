@@ -6,6 +6,7 @@ import * as yaml from 'yaml';
 import * as fs from 'fs';
 
 export function setupApp(app: INestApplication) {
+  app.setGlobalPrefix('api');
   app.useGlobalPipes(new ValidationPipe());
   app.useGlobalInterceptors(new TransformInterceptor());
   app.useGlobalFilters(new HttpExceptionFilter());

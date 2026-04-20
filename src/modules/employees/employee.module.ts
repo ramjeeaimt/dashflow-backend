@@ -8,6 +8,7 @@ import { EmployeeController } from './employee.controller';
 import { UserModule } from '../users/user.module';
 import { AccessControlModule } from '../access-control/access-control.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { MailModule } from '../mail/mail.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     UserModule,
     AccessControlModule,
     NotificationsModule,
+    MailModule,
   ],
   controllers: [EmployeeController],
   providers: [EmployeeService],
