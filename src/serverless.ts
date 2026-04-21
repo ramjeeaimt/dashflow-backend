@@ -22,11 +22,16 @@ export default async (req, res) => {
   ];
 
   const origin = req.headers.origin;
-  const isAllowed = !origin || allowedOrigins.includes(origin) || (origin.endsWith('.vercel.app'));
+  const isAllowed = !origin || 
+    allowedOrigins.includes(origin) || 
+    origin.endsWith('.vercel.app') ||
+    origin.startsWith('http://localhost') ||
+    origin.startsWith('http://127.0.0.1');
 
   if (isAllowed && origin) {
     res.setHeader('Access-Control-Allow-Origin', origin);
   } else {
+    // Fallback for security but still providing a header
     res.setHeader('Access-Control-Allow-Origin', 'https://difmo-crm-frontend.vercel.app');
   }
 

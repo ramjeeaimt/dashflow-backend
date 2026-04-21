@@ -20,6 +20,8 @@ export function setupApp(app: INestApplication) {
 
       // In production mode, we still want to allow localhost for local testing/debugging
       const allowedOrigins = [
+        'https://difmo-crm-frontend.vercel.app',
+        'https://difmo-crm-backend.vercel.app',
         'vercel.app',
         'localhost:5173',
         'localhost:5174',
@@ -30,7 +32,7 @@ export function setupApp(app: INestApplication) {
         '127.0.0.1:5175'
       ];
       
-      const isAllowed = !origin || allowedOrigins.some(domain => origin.includes(domain));
+      const isAllowed = !origin || allowedOrigins.some(domain => origin === domain || origin.includes(domain));
       
       if (isAllowed) {
         callback(null, true);
