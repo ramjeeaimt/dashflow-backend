@@ -22,9 +22,9 @@ import { MailService } from '../mail/mail.service';
 
 @Injectable()
 export class AttendanceService {
-  // Office coordinates: 26.8604607, 81.02013
-  private readonly OFFICE_LAT = 26.8604607;
-  private readonly OFFICE_LNG = 81.02013;
+  // Office coordinates: 26.8604635, 81.0199275
+  private readonly OFFICE_LAT = 26.8604635;
+  private readonly OFFICE_LNG = 81.0199275;
   private readonly MAX_DISTANCE_METERS = 350;
 
   constructor(
