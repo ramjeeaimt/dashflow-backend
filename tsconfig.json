@@ -24,7 +24,7 @@
     "strictBindCallApply": false,
     "noFallthroughCasesInSwitch": false,
     "useUnknownInCatchVariables": false,
-     "types": ["node"]
+     "types": ["node", "express", "multer"]
    
   },
    "exclude": [
