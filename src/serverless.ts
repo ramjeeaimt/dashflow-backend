@@ -6,6 +6,7 @@ import * as dns from 'node:dns';
 
 // Force IPv4 for database connections
 dns.setDefaultResultOrder('ipv4first');
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
 let appPromise: Promise<any>;
 
