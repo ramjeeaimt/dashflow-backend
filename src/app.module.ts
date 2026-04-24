@@ -126,6 +126,9 @@ import { JobMessage } from './modules/jobs/entities/message.entity';
               max: 20,
               idleTimeoutMillis: 30000,
               connectionTimeoutMillis: 10000,
+              ssl: {
+                rejectUnauthorized: false,
+              },
               // Force IPv4 at the driver level
               lookup: (hostname, options, callback) => {
                 require('node:dns').lookup(hostname, { ...options, family: 4 }, callback);
