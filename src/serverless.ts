@@ -2,10 +2,6 @@ import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { setupApp } from './setup';
-import * as dns from 'node:dns';
-
-// Force IPv4 for database connections
-dns.setDefaultResultOrder('ipv4first');
 
 let appPromise: Promise<any>;
 

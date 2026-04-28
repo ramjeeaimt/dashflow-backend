@@ -129,10 +129,6 @@ import { JobMessage } from './modules/jobs/entities/message.entity';
               ssl: {
                 rejectUnauthorized: false,
               },
-              // Force IPv4 at the driver level
-              lookup: (hostname, options, callback) => {
-                require('node:dns').lookup(hostname, { ...options, family: 4 }, callback);
-              },
             },
             retryAttempts: 10,
             retryDelay: 3000,

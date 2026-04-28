@@ -68,6 +68,7 @@
     "socket.io": "^4.8.3",
     "sqlite3": "^5.1.7",
     "streamifier": "^0.1.1",
+    "swagger-ui-express": "^5.0.1",
     "typeorm": "^0.3.6",
     "yaml": "^2.8.2"
   },
