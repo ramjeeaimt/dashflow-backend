@@ -80,7 +80,7 @@ async function bootstrap() {
   for (const name of roleNames) {
     let role = existingRoles.find(r => r.name === name);
     if (!role) {
-      role = await accessControlService.createRole({ name, description: `${name} Role` } as any);
+      role = await accessControlService.createRole({ name, description: `${name} Role`, companyId: company!.id } as any);
       console.log(`✅ Created Role: ${name}`);
     } else {
       console.log(`ℹ️ Role ${name} already exists`);
@@ -89,12 +89,14 @@ async function bootstrap() {
   }
 
   const adminRole = roles.find(r => r.name === 'Admin');
+  const managerRole = roles.find(r => r.name === 'Manager');
   const empRole = roles.find(r => r.name === 'Employee');
+  const hrRole = roles.find(r => r.name === 'HR');
 
   // 4. Create Employees
   const employeesData = [
     {
-      email: 'admin@difmo.com',
+      email: 'admin@a.com',
       firstName: 'Admin',
       lastName: 'User',
       password: 'password123',
@@ -102,20 +104,28 @@ async function bootstrap() {
       role: adminRole,
     },
     {
-      email: 'john.doe@difmo.com',
-      firstName: 'John',
-      lastName: 'Doe',
+      email: 'manager@a.com',
+      firstName: 'Manager',
+      lastName: 'User',
+      password: 'password123',
+      department: departments.find(d => d.name === 'Sales'),
+      role: managerRole,
+    },
+    {
+      email: 'emp@a.com',
+      firstName: 'Employee',
+      lastName: 'User',
       password: 'password123',
       department: departments.find(d => d.name === 'Sales'),
       role: empRole,
     },
     {
-      email: 'jane.smith@difmo.com',
-      firstName: 'Jane',
-      lastName: 'Smith',
+      email: 'hr@a.com',
+      firstName: 'HR',
+      lastName: 'User',
       password: 'password123',
       department: departments.find(d => d.name === 'Human Resources'),
-      role: empRole,
+      role: hrRole,
     }
   ];
 

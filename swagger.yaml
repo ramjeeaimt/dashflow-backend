@@ -1,27 +1,27 @@
 openapi: 3.0.0
 paths:
-  /:
+  /api:
     get:
       operationId: AppController_getHello
       parameters: []
       responses:
         "200":
           description: ""
-  /auth/login:
+  /api/auth/login:
     post:
       operationId: AuthController_login
       parameters: []
       responses:
         "201":
           description: ""
-  /auth/register:
+  /api/auth/register:
     post:
       operationId: AuthController_register
       parameters: []
       responses:
         "201":
           description: ""
-  /auth/profile:
+  /api/auth/profile:
     get:
       operationId: AuthController_getProfile
       parameters: []
@@ -34,7 +34,7 @@ paths:
       responses:
         "200":
           description: ""
-  /company:
+  /api/company:
     post:
       operationId: CompanyController_create
       parameters: []
@@ -47,7 +47,7 @@ paths:
       responses:
         "201":
           description: ""
-  /company/id/{id}:
+  /api/company/id/{id}:
     get:
       operationId: CompanyController_findById
       parameters:
@@ -59,7 +59,7 @@ paths:
       responses:
         "200":
           description: ""
-  /company/{email}:
+  /api/company/{email}:
     get:
       operationId: CompanyController_findOne
       parameters:
@@ -71,7 +71,7 @@ paths:
       responses:
         "200":
           description: ""
-  /company/{id}:
+  /api/company/{id}:
     patch:
       operationId: CompanyController_update
       parameters:
@@ -83,7 +83,7 @@ paths:
       responses:
         "200":
           description: ""
-  /departments:
+  /api/departments:
     post:
       operationId: DepartmentController_create
       parameters: []
@@ -107,7 +107,7 @@ paths:
       responses:
         "200":
           description: ""
-  /departments/{id}:
+  /api/departments/{id}:
     get:
       operationId: DepartmentController_findOne
       parameters:
@@ -147,7 +147,7 @@ paths:
       responses:
         "200":
           description: ""
-  /access-control/roles:
+  /api/access-control/roles:
     get:
       operationId: AccessControlController_findAllRoles
       parameters:
@@ -165,7 +165,7 @@ paths:
       responses:
         "201":
           description: ""
-  /access-control/roles/{id}:
+  /api/access-control/roles/{id}:
     get:
       operationId: AccessControlController_findOneRole
       parameters:
@@ -188,7 +188,18 @@ paths:
       responses:
         "200":
           description: ""
-  /access-control/permissions:
+    delete:
+      operationId: AccessControlController_deleteRole
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+  /api/access-control/permissions:
     get:
       operationId: AccessControlController_findAllPermissions
       parameters: []
@@ -201,14 +212,14 @@ paths:
       responses:
         "201":
           description: ""
-  /access-control/seed:
+  /api/access-control/seed:
     post:
       operationId: AccessControlController_seed
       parameters: []
       responses:
         "201":
           description: ""
-  /employees:
+  /api/employees:
     post:
       operationId: EmployeeController_create
       parameters: []
@@ -227,21 +238,21 @@ paths:
       responses:
         "200":
           description: ""
-  /employees/sync-roles:
+  /api/employees/sync-roles:
     post:
       operationId: EmployeeController_syncRoles
       parameters: []
       responses:
         "201":
           description: ""
-  /employees/bulk-managers:
+  /api/employees/bulk-managers:
     post:
       operationId: EmployeeController_bulkManagers
       parameters: []
       responses:
         "201":
           description: ""
-  /employees/{id}/manager-role:
+  /api/employees/{id}/manager-role:
     delete:
       operationId: EmployeeController_revokeManager
       parameters:
@@ -253,7 +264,7 @@ paths:
       responses:
         "200":
           description: ""
-  /employees/stats/count:
+  /api/employees/stats/count:
     get:
       operationId: EmployeeController_getCount
       parameters:
@@ -265,7 +276,7 @@ paths:
       responses:
         "200":
           description: ""
-  /employees/{id}:
+  /api/employees/{id}:
     get:
       operationId: EmployeeController_findOne
       parameters:
@@ -305,7 +316,7 @@ paths:
       responses:
         "200":
           description: ""
-  /notifications/fcm-token:
+  /api/notifications/fcm-token:
     post:
       operationId: NotificationsController_saveFcmToken
       parameters: []
@@ -318,14 +329,14 @@ paths:
       responses:
         "200":
           description: ""
-  /notifications/send:
+  /api/notifications/send:
     post:
       operationId: NotificationsController_send
       parameters: []
       responses:
         "201":
           description: ""
-  /notifications/history:
+  /api/notifications/history:
     get:
       operationId: NotificationsController_getHistory
       parameters:
@@ -337,14 +348,14 @@ paths:
       responses:
         "200":
           description: ""
-  /notifications/mine:
+  /api/notifications/mine:
     get:
       operationId: NotificationsController_getMyNotifications
       parameters: []
       responses:
         "200":
           description: ""
-  /notifications/stats:
+  /api/notifications/stats:
     get:
       operationId: NotificationsController_getStats
       parameters:
@@ -356,21 +367,21 @@ paths:
       responses:
         "200":
           description: ""
-  /notifications/mark-read:
+  /api/notifications/mark-read:
     post:
       operationId: NotificationsController_markRead
       parameters: []
       responses:
         "201":
           description: ""
-  /notifications/clear:
+  /api/notifications/clear:
     delete:
       operationId: NotificationsController_clearAll
       parameters: []
       responses:
         "200":
           description: ""
-  /attendance/check-in:
+  /api/attendance/check-in:
     post:
       operationId: AttendanceController_checkIn
       parameters: []
@@ -383,7 +394,7 @@ paths:
       responses:
         "201":
           description: ""
-  /attendance/bulk-check-in:
+  /api/attendance/bulk-check-in:
     post:
       operationId: AttendanceController_bulkCheckIn
       parameters: []
@@ -396,7 +407,7 @@ paths:
       responses:
         "201":
           description: ""
-  /attendance/check-out:
+  /api/attendance/check-out:
     post:
       operationId: AttendanceController_checkOut
       parameters: []
@@ -409,7 +420,7 @@ paths:
       responses:
         "201":
           description: ""
-  /attendance:
+  /api/attendance:
     post:
       operationId: AttendanceController_create
       parameters: []
@@ -428,7 +439,7 @@ paths:
       responses:
         "200":
           description: ""
-  /attendance/today/{employeeId}:
+  /api/attendance/today/{employeeId}:
     get:
       operationId: AttendanceController_getTodayAttendance
       parameters:
@@ -440,14 +451,14 @@ paths:
       responses:
         "200":
           description: ""
-  /attendance/analytics:
+  /api/attendance/analytics:
     get:
       operationId: AttendanceController_getAnalytics
       parameters: []
       responses:
         "200":
           description: ""
-  /attendance/{id}:
+  /api/attendance/{id}:
     get:
       operationId: AttendanceController_findOne
       parameters:
@@ -459,7 +470,7 @@ paths:
       responses:
         "200":
           description: ""
-  /leaves:
+  /api/leaves:
     post:
       operationId: LeavesController_create
       parameters: []
@@ -478,7 +489,7 @@ paths:
       responses:
         "200":
           description: ""
-  /leaves/{id}:
+  /api/leaves/{id}:
     get:
       operationId: LeavesController_findOne
       parameters:
@@ -490,7 +501,29 @@ paths:
       responses:
         "200":
           description: ""
-  /leaves/{id}/status:
+    patch:
+      operationId: LeavesController_update
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+    delete:
+      operationId: LeavesController_remove
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+  /api/leaves/{id}/status:
     patch:
       operationId: LeavesController_updateStatus
       parameters:
@@ -508,7 +541,67 @@ paths:
       responses:
         "200":
           description: ""
-  /designations:
+  /api/wfh-requests:
+    post:
+      operationId: WFHRequestsController_create
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateWFHRequestDto"
+      responses:
+        "201":
+          description: ""
+    get:
+      operationId: WFHRequestsController_findAll
+      parameters: []
+      responses:
+        "200":
+          description: ""
+  /api/wfh-requests/{id}:
+    get:
+      operationId: WFHRequestsController_findOne
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+    delete:
+      operationId: WFHRequestsController_remove
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+  /api/wfh-requests/{id}/status:
+    patch:
+      operationId: WFHRequestsController_updateStatus
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateWFHRequestStatusDto"
+      responses:
+        "200":
+          description: ""
+  /api/designations:
     post:
       operationId: DesignationController_create
       parameters: []
@@ -526,7 +619,7 @@ paths:
       responses:
         "200":
           description: ""
-  /designations/{id}:
+  /api/designations/{id}:
     get:
       operationId: DesignationController_findOne
       parameters:
@@ -560,7 +653,7 @@ paths:
       responses:
         "200":
           description: ""
-  /projects/clients:
+  /api/projects/clients:
     post:
       operationId: ProjectsController_createClient
       parameters: []
@@ -578,7 +671,7 @@ paths:
       responses:
         "200":
           description: ""
-  /projects:
+  /api/projects:
     post:
       operationId: ProjectsController_createProject
       parameters: []
@@ -596,7 +689,7 @@ paths:
       responses:
         "200":
           description: ""
-  /projects/tasks:
+  /api/projects/tasks:
     post:
       operationId: ProjectsController_createTask
       parameters: []
@@ -614,7 +707,7 @@ paths:
       responses:
         "200":
           description: ""
-  /projects/tasks/company:
+  /api/projects/tasks/company:
     get:
       operationId: ProjectsController_findAllTasksByCompany
       parameters:
@@ -626,7 +719,7 @@ paths:
       responses:
         "200":
           description: ""
-  /projects/tasks/{id}:
+  /api/projects/tasks/{id}:
     put:
       operationId: ProjectsController_updateTask
       parameters:
@@ -638,7 +731,7 @@ paths:
       responses:
         "200":
           description: ""
-  /projects/{id}:
+  /api/projects/{id}:
     get:
       operationId: ProjectsController_findOneProject
       parameters:
@@ -672,7 +765,7 @@ paths:
       responses:
         "200":
           description: ""
-  /finance/payroll:
+  /api/finance/payroll:
     post:
       operationId: FinanceController_createPayroll
       parameters: []
@@ -705,14 +798,14 @@ paths:
       responses:
         "200":
           description: ""
-  /finance/payroll/pay:
+  /api/finance/payroll/pay:
     post:
       operationId: FinanceController_markAsPaid
       parameters: []
       responses:
         "201":
           description: ""
-  /finance/expenses:
+  /api/finance/expenses:
     post:
       operationId: FinanceController_createExpense
       parameters: []
@@ -735,7 +828,7 @@ paths:
       responses:
         "200":
           description: ""
-  /finance/expenses/{id}:
+  /api/finance/expenses/{id}:
     delete:
       operationId: FinanceController_deleteExpense
       parameters:
@@ -747,7 +840,7 @@ paths:
       responses:
         "200":
           description: ""
-  /finance/payroll/{id}/slip:
+  /api/finance/payroll/{id}/slip:
     get:
       operationId: FinanceController_getPayrollSlip
       parameters:
@@ -759,21 +852,21 @@ paths:
       responses:
         "200":
           description: ""
-  /finance/generate:
+  /api/finance/generate:
     post:
       operationId: FinanceController_generatePayroll
       parameters: []
       responses:
         "201":
           description: ""
-  /finance/generate-single:
+  /api/finance/generate-single:
     post:
       operationId: FinanceController_generateSingle
       parameters: []
       responses:
         "201":
           description: ""
-  /finance/summary:
+  /api/finance/summary:
     get:
       operationId: FinanceController_getSummary
       parameters:
@@ -800,14 +893,37 @@ paths:
       responses:
         "200":
           description: ""
-  /time-tracking/start:
+  /api/finance/payroll/{id}:
+    patch:
+      operationId: FinanceController_updatePayroll
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+    delete:
+      operationId: FinanceController_deletePayroll
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+  /api/time-tracking/start:
     post:
       operationId: TimeTrackingController_start
       parameters: []
       responses:
         "201":
           description: ""
-  /time-tracking/stop/{id}:
+  /api/time-tracking/stop/{id}:
     put:
       operationId: TimeTrackingController_stop
       parameters:
@@ -819,7 +935,7 @@ paths:
       responses:
         "200":
           description: ""
-  /time-tracking:
+  /api/time-tracking:
     get:
       operationId: TimeTrackingController_findAll
       parameters:
@@ -831,7 +947,7 @@ paths:
       responses:
         "200":
           description: ""
-  /add-projects:
+  /api/add-projects:
     post:
       operationId: ProjectController_create
       parameters: []
@@ -844,7 +960,7 @@ paths:
       responses:
         "200":
           description: ""
-  /add-projects/{id}:
+  /api/add-projects/{id}:
     get:
       operationId: ProjectController_findOne
       parameters:
@@ -878,7 +994,7 @@ paths:
       responses:
         "200":
           description: ""
-  /api/clients:
+  /api/api/clients:
     get:
       operationId: ClientsController_getAllClients
       parameters: []
@@ -891,7 +1007,7 @@ paths:
       responses:
         "201":
           description: ""
-  /api/clients/{id}:
+  /api/api/clients/{id}:
     get:
       operationId: ClientsController_getOneClient
       parameters:
@@ -925,7 +1041,7 @@ paths:
       responses:
         "200":
           description: ""
-  /api/clients/{id}/send-invoice:
+  /api/api/clients/{id}/send-invoice:
     post:
       operationId: ClientsController_sendInvoice
       parameters:
@@ -937,7 +1053,7 @@ paths:
       responses:
         "201":
           description: ""
-  /companies/{id}:
+  /api/companies/{id}:
     get:
       operationId: CompaniesController_getCompany
       parameters:
@@ -966,28 +1082,28 @@ paths:
       responses:
         "200":
           description: ""
-  /upload/image:
+  /api/upload/image:
     post:
       operationId: UploadController_uploadImage
       parameters: []
       responses:
         "201":
           description: ""
-  /upload/profileImage:
+  /api/upload/profileImage:
     post:
       operationId: UploadController_uploadAvatar
       parameters: []
       responses:
         "201":
           description: ""
-  /upload/document:
+  /api/upload/document:
     post:
       operationId: UploadController_uploadDocument
       parameters: []
       responses:
         "201":
           description: ""
-  /dashboard/metrics:
+  /api/dashboard/metrics:
     get:
       operationId: DashboardController_getMetrics
       parameters:
@@ -1004,7 +1120,7 @@ paths:
       responses:
         "200":
           description: ""
-  /dashboard/charts:
+  /api/dashboard/charts:
     get:
       operationId: DashboardController_getCharts
       parameters:
@@ -1016,7 +1132,7 @@ paths:
       responses:
         "200":
           description: ""
-  /dashboard/feed:
+  /api/dashboard/feed:
     get:
       operationId: DashboardController_getFeed
       parameters:
@@ -1033,7 +1149,7 @@ paths:
       responses:
         "200":
           description: ""
-  /dashboard/financials:
+  /api/dashboard/financials:
     get:
       operationId: DashboardController_getFinancials
       parameters:
@@ -1045,7 +1161,7 @@ paths:
       responses:
         "200":
           description: ""
-  /jobs:
+  /api/jobs:
     post:
       operationId: JobsController_createJob
       parameters: []
@@ -1058,7 +1174,7 @@ paths:
       responses:
         "200":
           description: ""
-  /jobs/{id}:
+  /api/jobs/{id}:
     get:
       operationId: JobsController_getJob
       parameters:
@@ -1092,7 +1208,7 @@ paths:
       responses:
         "200":
           description: ""
-  /jobs/{id}/applications:
+  /api/jobs/{id}/applications:
     post:
       operationId: JobsController_createApplication
       parameters:
@@ -1104,14 +1220,14 @@ paths:
       responses:
         "201":
           description: ""
-  /jobs/applications:
+  /api/jobs/applications:
     get:
       operationId: JobsController_listApplications
       parameters: []
       responses:
         "200":
           description: ""
-  /jobs/applications/{id}/status:
+  /api/jobs/applications/{id}/status:
     patch:
       operationId: JobsController_updateAppStatus
       parameters:
@@ -1123,7 +1239,7 @@ paths:
       responses:
         "200":
           description: ""
-  /jobs/messages:
+  /api/jobs/messages:
     post:
       operationId: JobsController_createMessage
       parameters: []
@@ -1136,7 +1252,26 @@ paths:
       responses:
         "200":
           description: ""
-  /public/jobs:
+  /api/applications:
+    get:
+      operationId: ApplicationsController_listApplications
+      parameters: []
+      responses:
+        "200":
+          description: ""
+  /api/applications/{id}/status:
+    patch:
+      operationId: ApplicationsController_updateAppStatus
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+  /api/public/jobs:
     get:
       operationId: PublicJobsController_listJobs
       parameters: []
@@ -1149,14 +1284,14 @@ paths:
       responses:
         "201":
           description: ""
-  /public/jobs/applications:
+  /api/public/jobs/applications:
     get:
       operationId: PublicJobsController_listApplications
       parameters: []
       responses:
         "200":
           description: ""
-  /public/jobs/{id}:
+  /api/public/jobs/{id}:
     get:
       operationId: PublicJobsController_getJob
       parameters:
@@ -1190,7 +1325,7 @@ paths:
       responses:
         "200":
           description: ""
-  /public/jobs/{jobId}/applications:
+  /api/public/jobs/{jobId}/applications:
     post:
       operationId: PublicJobsController_createApplication
       parameters:
@@ -1251,6 +1386,12 @@ components:
       type: object
       properties: {}
     UpdateLeaveStatusDto:
+      type: object
+      properties: {}
+    CreateWFHRequestDto:
+      type: object
+      properties: {}
+    UpdateWFHRequestStatusDto:
       type: object
       properties: {}
     CompanyDocsDto:

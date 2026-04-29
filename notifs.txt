@@ -1,6 +1,0 @@
-Checking last 5 notifications in PROD...
-Title: Leave APPROVED | Filter: employees | RecipientIds: 1b08765d-e8d0-4d24-9404-3d12008ca5ef | Emails: ramjeekumaryadav558@gmail.com
-Title: Leave APPROVED | Filter: employees | RecipientIds: 1b08765d-e8d0-4d24-9404-3d12008ca5ef | Emails: ramjeekumaryadav558@gmail.com
-Title: New Leave Request | Filter: admin | RecipientIds: 53d4c875-f1c1-4d2d-b13d-5982654d0897 | Emails: admin@difmo.com
-Title: Leave APPROVED | Filter: employees | RecipientIds: 1b08765d-e8d0-4d24-9404-3d12008ca5ef | Emails: ramjeekumaryadav558@gmail.com
-Title: New Leave Request | Filter: admin | RecipientIds: 53d4c875-f1c1-4d2d-b13d-5982654d0897 | Emails: admin@difmo.com

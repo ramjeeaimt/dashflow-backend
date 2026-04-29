@@ -1,0 +1,15 @@
+ected to your Supabase instance and ran the SQL command CREATE DATABASE staging so your dev URL actually works.
+Seeded Roles and Users: I successfully ran the seed script (npm run seed:difmo) directly against your new staging database.
+Your staging dev database now successfully contains:
+
+Roles: Admin, Manager, Employee, HR
+Users:
+
+ admin@difmo.com,
+ 
+  john.doe@difmo.com,
+  
+   and jane.smith@difmo.com
+
+
+password123

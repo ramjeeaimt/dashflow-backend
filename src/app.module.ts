@@ -66,13 +66,13 @@ import { JobMessage } from './modules/jobs/entities/message.entity';
 
         console.log(`[APP_START] Current NODE_ENV: ${env}`);
         console.log(`[APP_START] APP_ENV_PROD: ${process.env.DATABASE_URL_PROD ? 'exists' : 'MISSING'}`);
-        console.log(`[APP_START] APP_ENV_STAGING: ${process.env.DATABASE_URL_STAGING ? 'exists' : 'MISSING'}`);
+        console.log(`[APP_START] APP_ENV_DEV: ${process.env.DATABASE_URL_DEV ? 'exists' : 'MISSING'}`);
 
         let dbUrl: string | undefined;
         if (env === 'production') {
-          dbUrl = configService.get<string>('DATABASE_URL_PROD') || configService.get<string>('DATABASE_URL') || configService.get<string>('DATABASE_URL_STAGING');
+          dbUrl = configService.get<string>('DATABASE_URL_PROD') || configService.get<string>('DATABASE_URL');
         } else if (env === 'development') {
-          dbUrl = configService.get<string>('DATABASE_URL_STAGING') || configService.get<string>('DATABASE_URL') || configService.get<string>('DATABASE_URL_PROD');
+          dbUrl = configService.get<string>('DATABASE_URL_DEV') || configService.get<string>('DATABASE_URL') || configService.get<string>('DATABASE_URL_PROD');
         }
         
         if (!dbUrl) {
