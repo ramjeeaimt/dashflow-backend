@@ -6,12 +6,13 @@ import { Notification } from './entities/notification.entity';
 import { FcmToken } from './entities/fcm-token.entity';
 import { Employee } from '../employees/employee.entity';
 import { User } from '../users/user.entity';
+import { Client } from '../clients/client.entity';
 import { AccessControlModule } from '../access-control/access-control.module';
 import { NotificationsGateway } from './notifications.gateway';
 
 @Module({
     imports: [
-        TypeOrmModule.forFeature([Notification, FcmToken, Employee, User]),
+        TypeOrmModule.forFeature([Notification, FcmToken, Employee, User, Client]),
         AccessControlModule,
     ],
     controllers: [NotificationsController],

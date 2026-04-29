@@ -7,7 +7,9 @@ import { Company } from '../companies/company.entity';
 import { Employee } from '../employees/employee.entity';
 import { Attendance } from '../attendance/attendance.entity';
 import { NotificationsService } from '../notifications/notifications.service';
-import PDFDocument from 'pdfkit';
+import { ConfigService } from '@nestjs/config';
+import axios from 'axios';
+const PDFDocument = require('pdfkit');
 
 import { Settings } from 'http2';
 
@@ -89,7 +91,11 @@ export class FinanceService {
             type: 'PAYROLL_GENERATED',
             month: payroll.month,
             year: payroll.year,
-            netSalary: netSal
+            netSalary: netSal,
+            basicSalary: payroll.basicSalary,
+            deductions: payroll.deductions,
+            allowances: payroll.allowances,
+            employeeName: emp.user ? `${emp.user.firstName} ${emp.user.lastName}` : 'Employee'
           }
         });
       }
@@ -111,12 +117,10 @@ export class FinanceService {
     companyId?: string,
   ): Promise<Payroll[]> {
 
-    // 1. Repository ki jagah QueryBuilder use karo duplicates se bachne ke liye
     const query = this.payrollRepository.createQueryBuilder('payroll')
       .leftJoinAndSelect('payroll.employee', 'employee')
       .leftJoinAndSelect('employee.user', 'user');
 
-    // 2. Admin Case: Filter by Company (look at both payroll.companyId and employee.companyId for maximum resilience)
     if (companyId && companyId !== 'undefined') {
       query.andWhere(new Brackets(qb => {
         qb.where('payroll.companyId = :companyId', { companyId })
@@ -301,7 +305,9 @@ export class FinanceService {
             type: 'PAYROLL_GENERATED',
             month,
             year,
-            netSalary
+            netSalary,
+            basicSalary: emp.salary,
+            employeeName: emp.user ? `${emp.user.firstName} ${emp.user.lastName}` : 'Employee'
           }
         });
       } catch (err) {
@@ -453,51 +459,128 @@ export class FinanceService {
   async generatePayrollSlip(payrollId: string): Promise<Buffer> {
     const payroll = await this.payrollRepository.findOne({
       where: { id: payrollId },
-      relations: ['employee'],
+      relations: ['employee', 'employee.user', 'employee.department', 'employee.designation'],
     });
 
     if (!payroll) throw new Error('Payroll not found');
 
-    //  CONVERT VALUES
+    const emp = payroll.employee;
+    const user = emp?.user;
     const basicSalary = Number(payroll.basicSalary || 0);
     const deductions = Number(payroll.deductions || 0);
+    const allowances = Number(payroll.allowances || 0);
     const netSalary = Number(payroll.netSalary || 0);
 
-    const doc = new PDFDocument({ size: 'A4', margin: 50 });
+    const doc = new PDFDocument({ size: 'A4', margin: 40 });
+    const chunks: any[] = [];
+    doc.on('data', (chunk) => chunks.push(chunk));
 
-    // Header
-    doc.fontSize(20).text('Payroll Slip', { align: 'center' });
-    doc.moveDown();
+    // Logo & Header
+    try {
+      const logoUrl = 'https://res.cloudinary.com/dxju8ikk4/image/upload/v1777469595/difmo_vector_icon.png';
+      const logoResponse = await axios.get(logoUrl, { responseType: 'arraybuffer' });
+      doc.image(logoResponse.data, 40, 40, { width: 50 });
+    } catch (e) {
+      console.error('Failed to load logo for PDF:', e.message);
+    }
 
-    // Employee info
-    doc.fontSize(12).text(`Employee Name: ${payroll.employee?.id || 'N/A'}`);
-    doc.text(`Employee ID: ${payroll.employee?.id}`);
-    doc.text(`Month/Year: ${payroll.month}/${payroll.year}`);
-    doc.moveDown();
+    doc.fillColor('#333').fontSize(22).font('Helvetica-Bold').text('Salary Slip', 100, 45, { align: 'right' });
+    doc.fontSize(10).font('Helvetica').text(`Generated on: ${new Date().toLocaleDateString()}`, 100, 75, { align: 'right' });
 
-    // Salary breakdown  FIXED
-    doc.text(`Basic Salary: ₹${basicSalary.toFixed(2)}`);
-    doc.text(`Leave Deduction: ₹${deductions.toFixed(2)}`);
-    doc.text(`Overtime Pay: ₹${payroll.overtimeRate || 0}`);
-    doc.text(`Net Salary: ₹${netSalary.toFixed(2)}`);
-    doc.text(`Status: ${payroll.status}`);
-    doc.moveDown();
+    // Divider
+    doc.moveTo(40, 100).lineTo(555, 100).strokeColor('#e2e8f0').lineWidth(2).stroke();
 
-    doc.text(
-      'This is a computer-generated slip and does not require signature.',
-      { align: 'center' }
-    );
+    // Title Section
+    doc.fillColor('#0f172a').fontSize(14).font('Helvetica-Bold').text(`${new Date(0, payroll.month - 1).toLocaleString('default', { month: 'long' })} ${payroll.year} Payroll Statement`, 40, 115);
+
+    // Helper for drawing tables
+    const drawRow = (y, label1, val1, label2, val2) => {
+      doc.fontSize(9).font('Helvetica-Bold').fillColor('#64748b').text(label1.toUpperCase(), 50, y);
+      doc.font('Helvetica').fillColor('#0f172a').text(String(val1 || 'N/A'), 160, y);
+      if (label2) {
+        doc.font('Helvetica-Bold').fillColor('#64748b').text(label2.toUpperCase(), 300, y);
+        doc.font('Helvetica').fillColor('#0f172a').text(String(val2 || 'N/A'), 410, y);
+      }
+      doc.moveTo(40, y + 15).lineTo(555, y + 15).strokeColor('#f1f5f9').lineWidth(1).stroke();
+    };
+
+    // Employee Details Section
+    let currentY = 145;
+    doc.rect(40, currentY, 515, 20).fill('#f8fafc');
+    doc.fillColor('#0f172a').font('Helvetica-Bold').text('EMPLOYEE INFORMATION', 50, currentY + 6);
+    currentY += 30;
+
+    drawRow(currentY, 'Employee Name', user ? `${user.firstName} ${user.lastName}` : 'N/A', 'Designation', emp?.designation?.name || 'N/A'); currentY += 22;
+    drawRow(currentY, 'Employee ID', emp?.employeeCode || 'N/A', 'Department', emp?.department?.name || 'N/A'); currentY += 35;
+
+    // Salary Components
+    doc.rect(40, currentY, 515, 20).fill('#f8fafc');
+    doc.fillColor('#0f172a').font('Helvetica-Bold').text('SALARY BREAKDOWN', 50, currentY + 6);
+    doc.text('AMOUNT (INR)', 450, currentY + 6, { align: 'right', width: 95 });
+    currentY += 30;
+
+    const drawSalaryRow = (y, label, val, isTotal = false) => {
+      doc.fontSize(isTotal ? 11 : 10).font(isTotal ? 'Helvetica-Bold' : 'Helvetica').fillColor(isTotal ? '#ffffff' : '#1e293b').text(label, 50, y);
+      doc.text(`${Number(val).toFixed(2)}`, 450, y, { align: 'right', width: 95 });
+      if (!isTotal) doc.moveTo(40, y + 15).lineTo(555, y + 15).strokeColor('#f1f5f9').stroke();
+    };
+
+    drawSalaryRow(currentY, 'Basic Salary', basicSalary); currentY += 22;
+    drawSalaryRow(currentY, 'Allowances & Bonuses', allowances); currentY += 22;
+    drawSalaryRow(currentY, 'Total Deductions', deductions); currentY += 25;
+
+    doc.rect(40, currentY - 5, 515, 30).fill('#0f172a');
+    drawSalaryRow(currentY + 5, 'NET PAYABLE SALARY (INR)', netSalary, true);
+    currentY += 50;
+
+    doc.fillColor('#0f172a').fontSize(11).font('Helvetica-Bold').text('Attendance Summary', 40, currentY);
+    currentY += 20;
+    doc.fontSize(10).font('Helvetica').fillColor('#64748b');
+    doc.text(`Total Days: 24  |  Worked: 24  |  Leaves: 0`, 40, currentY);
+    currentY += 60;
+
+    doc.moveTo(40, currentY).lineTo(555, currentY).strokeColor('#000').lineWidth(1).stroke();
+    currentY += 25;
+
+    const sigX = 50;
+    const contactX = 350;
+
+    // Identity Column (Left)
+    doc.fillColor('#000').fontSize(14).font('Helvetica-Bold').text('Team DIFMO', sigX, currentY);
+    doc.fontSize(10).font('Helvetica').fillColor('#1e293b').text('Corporate Support', sigX, currentY + 18);
+    doc.fontSize(9).font('Helvetica-Oblique').fillColor('#475569').text('Communications & Experience', sigX, currentY + 30);
+    doc.fontSize(10).font('Helvetica-Bold').fillColor('#000').text('DIFMO Technologies Pvt Ltd', sigX, currentY + 45);
+
+    // Contact Column (Right) - Starting at same Y
+    const drawContact = (y, icon, text) => {
+      doc.rect(contactX, y, 14, 14).fill('#000');
+      doc.fillColor('#fff').fontSize(8).font('Helvetica-Bold').text(icon, contactX, y + 3, { align: 'center', width: 14 });
+      doc.fillColor('#000').fontSize(10).font('Helvetica').text(text, contactX + 25, y + 2);
+    };
+
+    drawContact(currentY, 'E', 'info@difmo.com');
+    drawContact(currentY + 20, 'A', '4/37 Vibhav Khand, Gomtinagr Lucknow, Uttar Pradesh 226016, India');
+    drawContact(currentY + 40, 'W', 'www.difmo.com');
+
+    // Second Row: The Banner Image
+    currentY += 75;
+    try {
+      const avatarUrl = 'https://res.cloudinary.com/dxju8ikk4/image/upload/v1777468072/difmo_banner_final.png';
+      const avatarResponse = await axios.get(avatarUrl, { responseType: 'arraybuffer' });
+      doc.image(avatarResponse.data, 40, currentY, { width: 515 });
+      currentY += 120; // Adjust for banner height
+    } catch (e) { }
+
+    currentY += 20;
+    doc.moveTo(40, currentY).lineTo(555, currentY).strokeColor('#000').lineWidth(1).stroke();
+
+    doc.fontSize(7).fillColor('#94a3b8').text('CONFIDENTIAL: This document contains proprietary information and is intended for the named employee only. © 2026 DIFMO PRIVATE LIMITED.', 40, 780, { align: 'center' });
 
     doc.end();
 
-    const pdfBuffer = await new Promise<Buffer>((resolve, reject) => {
-      const chunks: any[] = [];
-      doc.on('data', (chunk) => chunks.push(chunk));
+    return new Promise<Buffer>((resolve) => {
       doc.on('end', () => resolve(Buffer.concat(chunks)));
-      doc.on('error', reject);
     });
-
-    return pdfBuffer;
   }
 
 
@@ -511,8 +594,6 @@ export class FinanceService {
 
     payroll.status = 'paid';
     const updated = await this.payrollRepository.save(payroll);
-
-    // 🔥 Real-time Notification to Employee on Payment
     try {
       const emp = await this.employeeRepository.findOne({
         where: { id: payroll.employeeId },
@@ -532,7 +613,9 @@ export class FinanceService {
             type: 'PAYROLL_PAID',
             month: payroll.month,
             year: payroll.year,
-            netSalary: netSal
+            netSalary: netSal,
+            status: 'paid',
+            employeeName: emp.user ? `${emp.user.firstName} ${emp.user.lastName}` : 'Employee'
           }
         });
       }
@@ -645,5 +728,44 @@ export class FinanceService {
     if (!payroll) throw new NotFoundException('Payroll not found');
     await this.payrollRepository.remove(payroll);
     return { message: 'Payroll deleted successfully' };
+  }
+
+  async sendPayrollEmail(id: string) {
+    const payroll = await this.payrollRepository.findOne({
+      where: { id },
+      relations: ['employee', 'employee.user']
+    });
+
+    if (!payroll) throw new NotFoundException('Payroll not found');
+    if (!payroll.employee?.user?.email) throw new Error('Employee email not found');
+
+    const netSal = this.parseSalary(payroll.netSalary);
+
+    // Generate PDF for attachment
+    const pdfBuffer = await this.generatePayrollSlip(id);
+
+    await this.notificationsService.send({
+      title: 'Difmo Pvt Ltd: Payroll Slip Generated',
+      message: `Your payroll for ${payroll.month}/${payroll.year} has been generated. Please find the attached payslip for your records.`,
+      type: 'email',
+      recipientFilter: 'employees',
+      recipientIds: [payroll.employee.userId],
+      companyId: payroll.companyId,
+      attachments: [
+        {
+          filename: `Payslip_${payroll.month}_${payroll.year}.pdf`,
+          content: pdfBuffer,
+          contentType: 'application/pdf'
+        }
+      ],
+      metadata: {
+        type: 'PAYROLL_GENERATED',
+        month: payroll.month,
+        year: payroll.year,
+        netSalary: netSal
+      }
+    });
+
+    return { message: 'Email sent successfully with attachment' };
   }
 }

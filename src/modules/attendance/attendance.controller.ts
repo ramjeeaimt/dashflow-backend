@@ -6,6 +6,7 @@ import {
   Param,
   Query,
   UseGuards,
+  Patch,
 } from '@nestjs/common';
 import { AttendanceService } from './attendance.service';
 import {
@@ -73,5 +74,11 @@ export class AttendanceController {
   @CheckAbilities({ action: Action.Read, subject: 'attendance' })
   async findOne(@Param('id') id: string) {
     return this.attendanceService.findOne(id);
+  }
+
+  @Patch(':id')
+  @CheckAbilities({ action: Action.Update, subject: 'attendance' })
+  async update(@Param('id') id: string, @Body() data: any) {
+    return this.attendanceService.update(id, data);
   }
 }

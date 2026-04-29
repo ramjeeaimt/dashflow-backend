@@ -470,6 +470,17 @@ paths:
       responses:
         "200":
           description: ""
+    patch:
+      operationId: AttendanceController_update
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
   /api/leaves:
     post:
       operationId: LeavesController_create
@@ -915,6 +926,18 @@ paths:
             type: string
       responses:
         "200":
+          description: ""
+  /api/finance/payroll/{id}/send-email:
+    post:
+      operationId: FinanceController_sendPayrollEmail
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "201":
           description: ""
   /api/time-tracking/start:
     post:

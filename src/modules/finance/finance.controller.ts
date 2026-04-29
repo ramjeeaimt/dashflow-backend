@@ -124,6 +124,12 @@ export class FinanceController {
     return this.financeService.updatePayroll(id, data);
   }
 
+  @Post('payroll/:id/send-email')
+  @CheckAbilities({ action: Action.Update, subject: 'payroll' })
+  sendPayrollEmail(@Param('id') id: string) {
+    return this.financeService.sendPayrollEmail(id);
+  }
+
   @Delete('payroll/:id')
   @CheckAbilities({ action: Action.Delete, subject: 'payroll' })
   deletePayroll(@Param('id') id: string) {

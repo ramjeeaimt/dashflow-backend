@@ -35,6 +35,9 @@ export class Notification {
     @Column({ nullable: true, type: 'simple-array' })
     recipientEmails: string[];
 
+    @Column({ nullable: true, type: 'simple-json' })
+    metadata: any;
+
     @Column({ default: 'pending' })
     status: string; // 'pending' | 'sent' | 'failed'
 

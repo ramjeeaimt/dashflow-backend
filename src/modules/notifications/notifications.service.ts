@@ -11,6 +11,7 @@ import { Notification } from './entities/notification.entity';
 import { FcmToken } from './entities/fcm-token.entity';
 import { Employee } from '../employees/employee.entity';
 import { User } from '../users/user.entity';
+import { Client } from '../clients/client.entity';
 import { ConfigService } from '@nestjs/config';
 import * as admin from 'firebase-admin';
 import { NotificationsGateway } from './notifications.gateway';
@@ -22,10 +23,12 @@ export interface SendNotificationDto {
     recipientFilter: 'all' | 'country' | 'employees' | 'custom' | 'clients' | 'admin';
     recipientIds?: string[];
     recipientEmails?: string[];
+    recipientClientIds?: string[];
     recipientCountry?: string;
     companyId: string;
     sentById?: string;
     metadata?: any;
+    attachments?: { filename: string; content: Buffer | string; contentType?: string }[];
 }
 
 @Injectable()
@@ -42,6 +45,8 @@ export class NotificationsService implements OnModuleInit {
         private readonly employeeRepo: Repository<Employee>,
         @InjectRepository(User)
         private readonly userRepo: Repository<User>,
+        @InjectRepository(Client)
+        private readonly clientRepo: Repository<Client>,
         private readonly mailerService: MailerService,
         private readonly configService: ConfigService,
         private readonly gateway: NotificationsGateway,
@@ -124,116 +129,197 @@ export class NotificationsService implements OnModuleInit {
     // ─── Email Templates ─────────────────────────────────────────────────────────
 
     private getEmailTemplate(type: string, title: string, message: string, metadata: any = {}): string {
-        const logoUrl = 'https://via.placeholder.com/150?text=Difmo+Pvt+Ltd'; 
-        const appUrl = this.configService.get('APP_URL') || 'http://localhost:3000';
-        const baseStyle = `
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            max-width: 600px;
-            margin: 0 auto;
-            border: 1px solid #eee;
-            border-radius: 8px;
-            overflow: hidden;
-        `;
-        const headerStyle = `
-            background-color: #4f46e5;
-            color: white;
-            padding: 20px;
-            text-align: center;
-        `;
-        const bodyStyle = `padding: 30px; background-color: #ffffff;`;
-        const footerStyle = `
-            background-color: #f9fafb;
-            padding: 20px;
-            text-align: center;
-            font-size: 12px;
-            color: #6b7280;
-        `;
+        const content = this.getSpecializedContent(type, title, message, metadata);
+        return this.getEmailLayout(title, content);
+    }
+    private getEmailLayout(title: string, content: string): string {
+        const year = new Date().getFullYear();
+        const bannerUrl = 'https://res.cloudinary.com/dxju8ikk4/image/upload/v1777468072/difmo_banner_final.png';
 
-        let content = `<p>${message}</p>`;
+        const contactRow = (letter: string, children: string) => `
+        <tr>
+            <td width="32" valign="top" style="padding-bottom: 14px;">
+                <div style="width: 24px; height: 24px; background: #000; border-radius: 50%; text-align: center; line-height: 24px;">
+                    <span style="color: #fff; font-size: 11px; font-weight: 800;">${letter}</span>
+                </div>
+            </td>
+            <td style="padding-bottom: 14px; font-size: 14px; font-weight: 600; color: #000; line-height: 1.5;">${children}</td>
+        </tr>`;
 
-        if (type === 'LEAVE_STATUS') {
-            const statusColor = metadata.status === 'APPROVED' ? '#10b981' : '#ef4444';
-            content = `
-                <div style="border-left: 4px solid ${statusColor}; padding-left: 15px; margin: 20px 0;">
-                    <h3 style="color: ${statusColor}; margin-top: 0;">Leave ${metadata.status}</h3>
-                    <p>${message}</p>
-                    ${metadata.comment ? `<p><strong>Admin Note:</strong> ${metadata.comment}</p>` : ''}
-                </div>
-                <div style="margin-top: 20px;">
-                    <a href="${appUrl}/employee/leaves" style="background-color: #4f46e5; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">View Leave History</a>
-                </div>
-            `;
-        } else if (type === 'PAYROLL_GENERATED') {
-            content = `
-                <div style="background-color: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                    <h3 style="margin-top: 0; color: #111827;">Payslip Available: ${metadata.month}/${metadata.year}</h3>
-                    <p style="font-size: 24px; font-weight: bold; color: #4f46e5; margin: 10px 0;">₹${metadata.netSalary?.toFixed(2)}</p>
-                    <p style="margin-bottom: 0;">Your payroll for the month of ${metadata.month} has been successfully processed.</p>
-                </div>
-                <div style="margin-top: 20px; text-align: center;">
-                    <a href="${appUrl}/employee/payroll" style="background-color: #10b981; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">Download Payslip</a>
-                </div>
-            `;
-        } else if (type === 'PAYROLL_PAID') {
-            content = `
-                <div style="background-color: #ecfdf5; border: 1px solid #10b981; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                    <h3 style="margin-top: 0; color: #065f46;">Salary Disbursed: ${metadata.month}/${metadata.year}</h3>
-                    <p style="font-size: 24px; font-weight: bold; color: #059669; margin: 10px 0;">₹${metadata.netSalary?.toFixed(2)}</p>
-                    <p style="margin-bottom: 0; color: #065f46;">Great news! Your salary has been credited to your account.</p>
-                </div>
-                <div style="margin-top: 20px; text-align: center;">
-                    <a href="${appUrl}/employee/payroll" style="background-color: #059669; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">View Details</a>
-                </div>
-            `;
-        } else if (type === 'TASK_ASSIGNED') {
-            content = `
-                <div style="border: 1px solid #e5e7eb; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                    <span style="background-color: #fee2e2; color: #ef4444; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; text-transform: uppercase;">${metadata.priority || 'NORMAL'}</span>
-                    <h3 style="margin: 10px 0; color: #111827;">${title}</h3>
-                    <p style="color: #4b5563;">${message}</p>
-                </div>
-                <div style="margin-top: 20px;">
-                    <a href="${appUrl}/task-management" style="background-color: #4f46e5; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">View Task Details</a>
-                </div>
-            `;
-        } else if (type === 'PROJECT_ASSIGNED') {
-            content = `
-                <div style="border: 1px solid #4f46e5; padding: 20px; border-radius: 8px; margin: 20px 0; background-color: #f5f3ff;">
-                    <h3 style="margin: 0; color: #4f46e5;">New Project: ${metadata.projectName || title}</h3>
-                    <p style="color: #4b5563; margin-top: 10px;">${message}</p>
-                    ${metadata.deadline ? `<p style="font-size: 13px; color: #6b7280;"><strong>Deadline:</strong> ${metadata.deadline}</p>` : ''}
-                </div>
-                <div style="margin-top: 20px; text-align: center;">
-                    <a href="${appUrl}/projects" style="background-color: #4f46e5; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">View My Projects</a>
-                </div>
-            `;
-        }
+        const socialIcon = (href: string, src: string) =>
+            `<a href="${href}" style="display: inline-block; margin-right: 14px;">
+            <img src="${src}" width="22" style="opacity: 0.75; vertical-align: middle;">
+        </a>`;
 
         return `
-            <div style="${baseStyle}">
-                <div style="${headerStyle}">
-                    <img src="${logoUrl}" alt="Difmo Pvt Ltd" style="height: 40px; margin-bottom: 10px;">
-                    <h1 style="margin: 0; font-size: 20px;">Difmo Pvt Ltd</h1>
-                </div>
-                <div style="${bodyStyle}">
+        <div style="font-family: 'Segoe UI', Helvetica, Arial, sans-serif; background: #fff; color: #1e293b; margin: 0; padding: 0;">
+            <div style="max-width: 700px; margin: 0;">
+
+                <!-- Header Branding -->
+        
+                <!-- Body -->
+                <div style="font-size: 16px; line-height: 1.6; color: #334155;">
                     ${content}
-                    <div style="margin-top: 30px; border-top: 1px solid #eee; padding-top: 20px;">
-                        <p style="margin: 0; font-size: 14px; color: #4b5563;">Regards,</p>
-                        <p style="margin: 0; font-weight: bold; color: #111827;">Difmo Pvt Ltd Team</p>
+                </div>
+
+                <!-- Signature -->
+                <div style="margin-top: 48px; padding-top: 28px; border-top: 1px solid #f1f5f9;">
+                    <img src="https://res.cloudinary.com/dxju8ikk4/image/upload/v1777469595/difmo_vector_icon.png"
+                         width="100" height="100"
+                         style="border-radius: 50%; object-fit: cover; display: block; margin-bottom: 20px;">
+
+                    <div style="border-top: 1px solid #1e293b; padding-top: 22px; max-width: 650px;">
+                        <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
+                            <tr>
+                                <!-- Left: Identity -->
+                                <td width="55%" valign="top">
+                                    <p style="margin: 0 0 2px; font-size: 20px; font-weight: 800; color: #000; letter-spacing: -0.4px;">Team DIFMO</p>
+                                    <p style="margin: 0 0 1px; font-size: 15px; color: #1e293b; font-weight: 500;">Corporate Support</p>
+                                    <p style="margin: 0 0 12px; font-size: 14px; color: #475569; font-style: italic;">Communications & Experience</p>
+                                    <p style="margin: 0 0 14px; font-size: 15px; font-weight: 800; color: #000;">DIFMO Technologies Pvt Ltd</p>
+                                    <a href="https://www.difmo.com/contact" style="color: #d03f13ff; font-size: 14px; font-weight: 700; text-decoration: none;">
+                                        Let's meet
+                                    </a>
+                                </td>
+
+                                <!-- Right: Contact -->
+                                <td width="45%" valign="top">
+                                    <table role="presentation" border="0" cellpadding="0" cellspacing="0">
+                                        ${contactRow('E', '<a href="mailto:info@difmo.com" style="color: #000; text-decoration: none;">info@difmo.com</a>')}
+                                        ${contactRow('A', '4/37 Vibhav Khand, Gomtinagr Lucknow, Uttar Pradesh 226016, India')}
+                                        ${contactRow('W', '<a href="https://www.difmo.com" style="color: #d03f13ff; text-decoration: none;">difmo.com</a>')}
+                                    </table>
+                                </td>
+                            </tr>
+                        </table>
                     </div>
+                    <div style="border-top: 1px solid #1e293b; margin-top: 22px; max-width: 650px;"></div>
                 </div>
-                <div style="${footerStyle}">
-                    <p>&copy; ${new Date().getFullYear()} Difmo Pvt Ltd. All rights reserved.</p>
-                    <p>You received this email from Difmo Pvt Ltd CRM.</p>
+
+                <!-- Banner -->
+                <div style="margin-top: 36px; border-radius: 10px; overflow: hidden; line-height: 0;">
+                    <img src="${bannerUrl}" alt="Our Services" style="width: 100%; height: auto; display: block;">
                 </div>
+
+                <!-- Social Links -->
+                <div style="margin-top: 28px;">
+                    ${socialIcon('#', 'https://cdn-icons-png.flaticon.com/512/145/145807.png')}
+                    ${socialIcon('#', 'https://cdn-icons-png.flaticon.com/512/145/145802.png')}
+                    ${socialIcon('#', 'https://cdn-icons-png.flaticon.com/512/145/145812.png')}
+                </div>
+
+                <!-- Legal -->
+                <div style="margin-top: 36px; font-size: 11px; color: #94a3b8; line-height: 1.5;">
+                    <p style="margin: 0;">
+This email, along with any attachments, documents, project files, source code, designs, business strategies, client information, and other transmitted materials, contains confidential and proprietary information belonging to <b>DIFMO</b>. It is intended solely for the use of the individual, organization, or entity to whom it is addressed.
+
+Any unauthorized access, review, copying, disclosure, distribution, modification, or use of this information is strictly prohibited and may be unlawful.
+
+If you have received this communication in error, please notify us immediately by replying to this email or contacting our support team at <b>info@difmo.com, mailto:info@difmo.com</b>, and permanently delete all copies of this message and its attachments from your system.
+
+Difmo Private Limited is committed to protecting client data, intellectual property, and business confidentiality across all services including AI solutions, web development, mobile applications, cloud services, cybersecurity, and smart technology solutions.
+
+<b>© 2026 Difmo Private Limited. All rights reserved.</b>
+</p>
+                    <p style="margin: 8px 0 0;">&copy; ${year} DIFMO PRIVATE LIMITED. ALL RIGHTS RESERVED.</p>
+                </div>
+
+                <!-- Anti-clipping spacer (Gmail) -->
+                <div style="display: none; white-space: nowrap; font: 15px courier; line-height: 0;">
+                    ${'&nbsp;'.repeat(20)} ${Date.now()} ${Math.random().toString(36).substring(7)}
+                </div>
+
             </div>
-        `;
+        </div>`;
+    }
+
+
+
+    private getSpecializedContent(type: string, title: string, message: string, metadata: any): string {
+        const appUrl = this.configService.get('APP_URL') || 'http://localhost:3000';
+
+        switch (type) {
+            case 'LEAVE_STATUS':
+                const leaveColor = metadata.status === 'APPROVED' ? '#10b981' : '#ef4444';
+                return `
+                    <div style="border-left: 4px solid ${leaveColor}; padding: 20px; background-color: #f8fafc; margin: 20px 0;">
+                        <h3 style="color: ${leaveColor}; margin-top: 0; font-size: 20px;">Leave ${metadata.status}</h3>
+                        <p style="color: #334155; font-size: 16px;">${message}</p>
+                    </div>
+                    <div style="margin-top: 30px;"><a href="${appUrl}/employee/leaves" style="background-color: #0f172a; color: white; padding: 12px 25px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: 600;">View Leave History</a></div>
+                `;
+
+            case 'PAYROLL_GENERATED':
+            case 'PAYROLL_PAID':
+                const isPaid = type === 'PAYROLL_PAID';
+                const accentColor = isPaid ? '#059669' : '#0f172a';
+                const bgColor = isPaid ? '#ecfdf5' : '#f8fafc';
+                const borderColor = isPaid ? '#d1fae5' : '#e2e8f0';
+                const empName = metadata.employeeName || 'Valued Employee';
+
+                let breakdownHtml = '';
+                if (metadata.basicSalary) {
+                    breakdownHtml = `
+                        <div style="margin: 25px 0; padding: 20px 0; border-top: 1px solid #f1f5f9; border-bottom: 1px solid #f1f5f9;">
+                            <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
+                                <tr>
+                                    <td style="color: #64748b; font-size: 14px; padding: 5px 0;">Basic Salary</td>
+                                    <td style="color: #0f172a; font-size: 14px; padding: 5px 0; text-align: right; font-weight: 700;">₹${Number(metadata.basicSalary).toFixed(2)}</td>
+                                </tr>
+                                ${metadata.allowances ? `
+                                <tr>
+                                    <td style="color: #64748b; font-size: 14px; padding: 5px 0;">Allowances</td>
+                                    <td style="color: #059669; font-size: 14px; padding: 5px 0; text-align: right; font-weight: 700;">+₹${Number(metadata.allowances).toFixed(2)}</td>
+                                </tr>` : ''}
+                                ${metadata.deductions ? `
+                                <tr>
+                                    <td style="color: #64748b; font-size: 14px; padding: 5px 0;">Deductions</td>
+                                    <td style="color: #ef4444; font-size: 14px; padding: 5px 0; text-align: right; font-weight: 700;">-₹${Number(metadata.deductions).toFixed(2)}</td>
+                                </tr>` : ''}
+                                <tr>
+                                    <td style="color: #0f172a; font-size: 16px; padding: 15px 0 5px 0; font-weight: 800;">Net Salary</td>
+                                    <td style="color: ${accentColor}; font-size: 20px; padding: 15px 0 5px 0; text-align: right; font-weight: 900;">₹${Number(metadata.netSalary).toFixed(2)}</td>
+                                </tr>
+                            </table>
+                        </div>
+                    `;
+                }
+
+                return `
+                    <p style="margin-bottom: 25px; font-weight: 700; color: #0f172a;">Dear ${empName},</p>
+                    <p style="margin-bottom: 20px; color: #475569;">Good day! Your payroll for <strong>${metadata.month}/${metadata.year}</strong> has been successfully processed.</p>
+                    <p style="margin-bottom: 25px; color: #475569;">${isPaid ? 'The funds have been credited to your registered bank account.' : 'You can now review and download your payslip from the employee portal.'}</p>
+                    
+                    ${breakdownHtml}
+                `;
+
+            case 'TASK_ASSIGNED':
+                return `
+                    <div style="border: 1px solid #e2e8f0; padding: 30px; border-radius: 16px; margin: 30px 0; background-color: #f8fafc;">
+                        <span style="background-color: #fee2e2; color: #ef4444; padding: 4px 12px; border-radius: 6px; font-size: 12px; font-weight: 800; text-transform: uppercase;">${metadata.priority || 'NORMAL'} PRIORITY</span>
+                        <h3 style="margin: 20px 0 10px 0; color: #0f172a; font-size: 24px;">${title}</h3>
+                        <p style="color: #475569; font-size: 18px;">${message}</p>
+                    </div>
+                    <div style="margin-top: 30px;"><a href="${appUrl}/task-management" style="background-color: #0f172a; color: white; padding: 14px 30px; text-decoration: none; border-radius: 8px; display: inline-block; font-weight: 600;">View Task Details</a></div>
+                `;
+
+            case 'PROJECT_ASSIGNED':
+                return `
+                    <div style="border: 1px solid #e2e8f0; padding: 30px; border-radius: 16px; margin: 30px 0; background-color: #f8fafc;">
+                        <h3 style="margin: 0; color: #6366f1; font-size: 14px; text-transform: uppercase;">New Project Assignment</h3>
+                        <p style="color: #0f172a; font-size: 28px; font-weight: 800; margin: 15px 0;">${metadata.projectName || title}</p>
+                        <p style="color: #475569; font-size: 16px;">${message}</p>
+                    </div>
+                    <div style="margin-top: 30px; text-align: center;"><a href="${appUrl}/projects" style="background-color: #4338ca; color: white; padding: 16px 40px; text-decoration: none; border-radius: 12px; display: inline-block; font-weight: 800;">GO TO PROJECT</a></div>
+                `;
+
+            default:
+                return `<p style="color: #334155; font-size: 18px; line-height: 1.8;">${message}</p>`;
+        }
     }
 
     private async resolveRecipients(dto: SendNotificationDto): Promise<{ emails: string[]; userIds: string[] }> {
-        const emails: string[] = [];
+        const emails: string[] = [...(dto.recipientEmails || [])];
         const userIds: string[] = [];
 
         if (dto.recipientFilter === 'all') {
@@ -244,6 +330,12 @@ export class NotificationsService implements OnModuleInit {
             for (const emp of employees) {
                 if (emp.user?.email) emails.push(emp.user.email);
                 if (emp.userId) userIds.push(emp.userId);
+            }
+            const clients = await this.clientRepo.find({
+                where: { companyId: dto.companyId },
+            });
+            for (const client of clients) {
+                if (client.email) emails.push(client.email);
             }
         } else if (dto.recipientFilter === 'country') {
             const employees = await this.employeeRepo.find({
@@ -265,20 +357,40 @@ export class NotificationsService implements OnModuleInit {
                 .where('user.companyId = :companyId', { companyId: dto.companyId })
                 .andWhere('LOWER(role.name) IN (:...roleNames)', { roleNames: ['admin', 'super admin', 'superadmin'] })
                 .getMany();
-            
+
             this.logger.log(`Found ${admins.length} admins to notify for company ${dto.companyId}`);
             for (const admin of admins) {
                 if (admin.email) emails.push(admin.email);
                 userIds.push(admin.id);
             }
-        } else if (dto.recipientFilter === 'employees' && !dto.recipientIds?.length) {
-            const employees = await this.employeeRepo.find({
-                where: { companyId: dto.companyId, status: 'active' },
-                relations: ['user'],
-            });
+        } else if (dto.recipientFilter === 'employees') {
+            const employees = dto.recipientIds?.length
+                ? await this.employeeRepo.find({
+                    where: [
+                        { id: In(dto.recipientIds), companyId: dto.companyId, status: 'active' as any },
+                        { userId: In(dto.recipientIds), companyId: dto.companyId, status: 'active' as any },
+                    ],
+                    relations: ['user'],
+                })
+                : await this.employeeRepo.find({
+                    where: { companyId: dto.companyId, status: 'active' },
+                    relations: ['user'],
+                });
             for (const emp of employees) {
                 if (emp.user?.email) emails.push(emp.user.email);
                 if (emp.userId) userIds.push(emp.userId);
+            }
+        } else if (dto.recipientFilter === 'clients') {
+            const clientIds = dto.recipientClientIds?.length ? dto.recipientClientIds : dto.recipientIds;
+            const clients = clientIds?.length
+                ? await this.clientRepo.find({
+                    where: { id: In(clientIds), companyId: dto.companyId },
+                })
+                : await this.clientRepo.find({
+                    where: { companyId: dto.companyId },
+                });
+            for (const client of clients) {
+                if (client.email) emails.push(client.email);
             }
         } else if (dto.recipientIds?.length) {
             this.logger.debug(`Resolving recipients by explicit IDs: ${dto.recipientIds.join(', ')}`);
@@ -308,6 +420,7 @@ export class NotificationsService implements OnModuleInit {
                     to: email,
                     subject: finalSubject,
                     html: htmlContent,
+                    attachments: metadata.attachments || [],
                 });
                 success++;
             } catch (err) {
@@ -338,6 +451,7 @@ export class NotificationsService implements OnModuleInit {
             recipientFilter: dto.recipientFilter,
             recipientIds: userIds,
             recipientEmails: emails,
+            metadata: dto.metadata,
             companyId: dto.companyId,
             sentById: dto.sentById,
             status: 'sent',
@@ -351,9 +465,15 @@ export class NotificationsService implements OnModuleInit {
         if (dto.type === 'email' || dto.type === 'both') {
             this.logger.log(`Attempting to send emails to: ${emails.join(', ')}`);
             try {
-                const results = await this.sendEmails(emails, dto.title, dto.message, dto.metadata);
+                const results = await this.sendEmails(emails, dto.title, dto.message, { ...dto.metadata, attachments: dto.attachments });
+                notification.successCount = results.success;
+                notification.failureCount = results.failure;
+                notification.status = results.failure > 0 && results.success === 0 ? 'failed' : 'sent';
+                await this.notificationRepo.save(notification);
                 this.logger.log(`Email send results: Success=${results.success}, Failure=${results.failure}`);
             } catch (err) {
+                notification.status = 'failed';
+                await this.notificationRepo.save(notification);
                 throw err;
             }
         }
@@ -382,7 +502,7 @@ export class NotificationsService implements OnModuleInit {
 
     // ─── Direct User Notifications (SQL Fallback) ─────────────────────────────────
     async getUserNotifications(userId: string): Promise<Notification[]> {
-        // Querying simple-array using LIKE to bypass complex JSON/Array Postgres specific paths
+
         return this.notificationRepo
             .createQueryBuilder('n')
             .where('n.recipientIds LIKE :userId', { userId: `%${userId}%` })
@@ -392,8 +512,19 @@ export class NotificationsService implements OnModuleInit {
     }
 
     async getStats(companyId: string) {
-        const total = await this.notificationRepo.count({ where: { companyId } });
-        return { total };
+        const notifications = await this.notificationRepo.find({
+            where: { companyId },
+            order: { createdAt: 'DESC' },
+            take: 200,
+        });
+
+        return {
+            total: notifications.length,
+            sent: notifications.filter((item) => item.status === 'sent').length,
+            failed: notifications.filter((item) => item.status === 'failed').length,
+            emailOnly: notifications.filter((item) => item.type === 'email').length,
+            multiChannel: notifications.filter((item) => item.type === 'both').length,
+        };
     }
 
     async getAllEmployees(companyId: string) {
@@ -406,12 +537,7 @@ export class NotificationsService implements OnModuleInit {
     // ─── Interaction Logic ──────────────────────────────────────────────────────
 
     async markAllAsRead(userId: string) {
-        // 1. Update SQL Database
-        // Note: For simplicity, we are updating the recipientIds JSON array matching logic
-        // In a real high-scale app, you'd have a join table for read status.
-        // For this MVP, we focus on the real-time Firestore sync which is what users see.
-        
-        // 2. Update Firestore (Batch update)
+
         if (!this.firestore) return;
 
         const snapshot = await this.firestore.collection('notifications')

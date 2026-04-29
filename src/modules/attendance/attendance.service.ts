@@ -564,4 +564,79 @@ export class AttendanceService {
       improvementRate: 2.4,
     };
   }
+
+  async update(id: string, data: any): Promise<Attendance> {
+    const attendance = await this.attendanceRepository.findOne({
+      where: { id },
+      relations: ['employee'],
+    });
+
+    if (!attendance) {
+      throw new NotFoundException('Attendance record not found');
+    }
+
+    // Detect changes for audit log
+    const changes: string[] = [];
+    if (data.checkInTime && data.checkInTime !== attendance.checkInTime) {
+      changes.push(`In: ${attendance.checkInTime || 'N/A'} → ${data.checkInTime}`);
+    }
+    if (data.checkOutTime && data.checkOutTime !== attendance.checkOutTime) {
+      changes.push(`Out: ${attendance.checkOutTime || 'N/A'} → ${data.checkOutTime}`);
+    }
+    if (data.status && data.status !== attendance.status) {
+      changes.push(`Status: ${attendance.status} → ${data.status}`);
+    }
+
+    // Update fields
+    if (data.checkInTime) attendance.checkInTime = data.checkInTime;
+    if (data.checkOutTime) attendance.checkOutTime = data.checkOutTime;
+    if (data.status) attendance.status = data.status;
+
+    if (data.notes) {
+      const now = new Date();
+      const options: Intl.DateTimeFormatOptions = {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+        timeZone: 'Asia/Kolkata'
+      };
+      const timestamp = new Intl.DateTimeFormat('en-IN', options).format(now);
+
+      const changeSummary = changes.length > 0 ? ` [${changes.join(', ')}]` : '';
+      const editNote = `[Edited on ${timestamp}]${changeSummary}: ${data.notes}`;
+
+      attendance.notes = attendance.notes ? `${attendance.notes} | ${editNote}` : editNote;
+    } else if (data.checkInTime || data.checkOutTime) {
+      // If times are being changed, enforce a note
+      throw new BadRequestException('A note explaining the reason for change is required.');
+    }
+
+    // Recalculate work hours if times exist
+    if (attendance.checkInTime && attendance.checkOutTime) {
+      const checkIn = new Date(`2000-01-01 ${attendance.checkInTime}`);
+      const checkOut = new Date(`2000-01-01 ${attendance.checkOutTime}`);
+
+      // Handle case where checkout is after midnight (next day)
+      let diff = checkOut.getTime() - checkIn.getTime();
+      if (diff < 0) {
+        // Assume checkout is next day
+        diff += 24 * 60 * 60 * 1000;
+      }
+
+      const workHours = diff / (1000 * 60 * 60);
+      attendance.workHours = Math.round(workHours * 100) / 100;
+
+      // Overtime logic (standard 8-hour workday)
+      if (attendance.workHours > 8) {
+        attendance.overtime = Math.round((attendance.workHours - 8) * 100) / 100;
+      } else {
+        attendance.overtime = 0;
+      }
+    }
+
+    return this.attendanceRepository.save(attendance);
+  }
 }
