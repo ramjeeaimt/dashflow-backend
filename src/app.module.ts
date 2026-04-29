@@ -118,7 +118,7 @@ import { JobMessage } from './modules/jobs/entities/message.entity';
             type: 'postgres',
             url: dbUrl,
             entities,
-            synchronize: true,
+            synchronize: env === 'development',
             ssl: {
               rejectUnauthorized: false,
             },
