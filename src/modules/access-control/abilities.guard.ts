@@ -14,7 +14,7 @@ export class AbilitiesGuard implements CanActivate {
   constructor(
     private reflector: Reflector,
     private abilityFactory: AbilityFactory,
-  ) {}
+  ) { }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const rules =
@@ -26,7 +26,7 @@ export class AbilitiesGuard implements CanActivate {
       return false;
     }
 
-    // NUCLEAR BYPASS: Ensure admin@difmo.com is NEVER blocked by permissions
+
     if (user.email && user.email.toLowerCase() === 'admin@difmo.com') {
       console.log(`[AbilitiesGuard] Nuclear bypass triggered for ${user.email}`);
       return true;

@@ -24,26 +24,15 @@ export class AuthController {
     const startTime = Date.now();
     console.log(`[AuthFlow] Login attempt for: ${req.email}`);
     
-    try {
-      const user = await this.authService.validateUser(req.email, req.password);
-      if (!user) {
-        console.warn(`[AuthFlow] Invalid credentials for: ${req.email} (Time: ${Date.now() - startTime}ms)`);
-        throw new UnauthorizedException('Invalid credentials');
-      }
-      
-      const response = await this.authService.login(user);
-      console.log(`[AuthFlow] Login SUCCESS for: ${req.email} (Time: ${Date.now() - startTime}ms)`);
-      return response;
-    } catch (error) {
-      console.error(`[AuthFlow] Login ERROR for: ${req.email}: ${error.message}`);
-      // Return a structured error response that axios can read
-      return {
-        statusCode: 500,
-        message: 'Login failed due to server error',
-        error: error.message,
-        stack: error.stack
-      };
+    const user = await this.authService.validateUser(req.email, req.password);
+    if (!user) {
+      console.warn(`[AuthFlow] Invalid credentials for: ${req.email} (Time: ${Date.now() - startTime}ms)`);
+      throw new UnauthorizedException('Invalid email or password');
     }
+    
+    const response = await this.authService.login(user);
+    console.log(`[AuthFlow] Login SUCCESS for: ${req.email} (Time: ${Date.now() - startTime}ms)`);
+    return response;
   }
 
 //register endpoint that allows new users to create an account. It accepts user details in the request body and uses the AuthService to create a new user record in the database. The implementation of the registration logic (e.g., hashing passwords, validating input) would be handled within the AuthService.

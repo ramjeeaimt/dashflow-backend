@@ -62,7 +62,6 @@ export class EmployeeService {
       const user = await this.userService.findById(userId);
       if (user) {
         if (roleIds) {
-          // ENSURE "Employee" role is always assigned (Real-World RBAC Logic)
           const employeeRole = await this.userService.findRoleByName('Employee');
           const finalRoleIds = [...roleIds];
           if (employeeRole && !finalRoleIds.includes(employeeRole.id)) {
@@ -98,38 +97,16 @@ export class EmployeeService {
 
     const savedEmployee = await this.employeeRepository.save(employee);
 
-    // Send Welcome Email
-    try {
-      if (createEmployeeDto.email) {
-        const company = await this.companyRepository.findOne({
-          where: { id: savedEmployee.companyId },
-        });
+    // Get company details for the email
+    const company = await this.companyRepository.findOne({
+      where: { id: savedEmployee.companyId },
+    });
 
-        console.log(`[EmployeeService] Attempting to send welcome email to ${createEmployeeDto.email}`);
-
-        await this.mailerService.sendMail({
-          to: createEmployeeDto.email,
-          subject: `Welcome to ${company?.name || 'the Team'}!`,
-          template: 'welcome',
-          context: {
-            name: `${createEmployeeDto.firstName} ${createEmployeeDto.lastName}`,
-            companyName: company?.name || 'Our Company',
-            loginUrl: 'https://difmo-crm-frontend.vercel.app/login',
-            year: new Date().getFullYear(),
-          },
-        }).catch(err => {
-          console.error('[EmployeeService] Mailer Error (handled):', err);
-        });
-      }
-    } catch (error) {
-      console.error('[EmployeeService] Critical failure in email logic (skipped):', error.message);
-    }
-
-    // 🔥 Real-time Notification to Employee
+    // 🔥 Real-time Notification & Unified Welcome Email
     try {
       await this.notificationsService.send({
         title: 'Welcome to the Team!',
-        message: `Hello ${createEmployeeDto.firstName}, you have been added to the system. You can now login to access your dashboard.`,
+        message: `Hello ${createEmployeeDto.firstName}, congratulations! You have been successfully added as an employee to ${company?.name || 'Difmo'}. We are excited to have you on board.`,
         type: 'both',
         recipientFilter: 'employees',
         recipientIds: [userId],
@@ -137,11 +114,13 @@ export class EmployeeService {
         metadata: {
           type: 'WELCOME',
           employeeId: savedEmployee.id,
-          email: createEmployeeDto.email
+          email: createEmployeeDto.email,
+          companyName: company?.name || 'Difmo',
+          password: createEmployeeDto.password || 'welcome123',
         }
       });
     } catch (err) {
-      console.error('[EmployeeService] Failed to send welcome notification:', err.message);
+      console.error('[EmployeeService] Failed to send welcome notification/email:', err.message);
     }
 
     return savedEmployee;
