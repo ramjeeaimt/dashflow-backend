@@ -34,4 +34,28 @@ export class DesignationService {
   async remove(id: string): Promise<void> {
     await this.designationRepository.delete(id);
   }
+
+  async seedDefaultDesignations(companyId: string): Promise<Designation[]> {
+    const defaults = [
+      'CEO & Founder',
+      'Operations Manager',
+      'HR Manager',
+      'Software Engineer',
+      'Product Manager',
+      'UI/UX Designer',
+      'Accountant',
+      'Sales Executive',
+      'Intern',
+      'Staff Member'
+    ];
+
+    const results: Designation[] = [];
+    for (const name of defaults) {
+      const existing = await this.designationRepository.findOne({ where: { name, companyId } });
+      if (!existing) {
+        results.push(await this.create({ name, companyId }));
+      }
+    }
+    return results;
+  }
 }

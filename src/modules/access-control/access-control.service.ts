@@ -107,6 +107,46 @@ export class AccessControlService {
     return { message: 'Permissions seeded successfully' };
   }
 
+  async seedDefaultRolesForCompany(companyId: string) {
+    const defaultRoles = [
+      { name: 'Admin', description: 'Full system access', permissions: 'manage:all' },
+      { name: 'Manager', description: 'Department management', permissions: 'manage:employee,manage:attendance,read:payroll' },
+      { name: 'Employee', description: 'Standard user access', permissions: 'read:employee,read:attendance' },
+    ];
+
+    const allPermissions = await this.permissionRepository.find();
+
+    for (const roleInfo of defaultRoles) {
+      const existing = await this.roleRepository.findOne({
+        where: { name: roleInfo.name, company: { id: companyId } },
+      });
+
+      if (!existing) {
+        const role = new Role();
+        role.name = roleInfo.name;
+        role.description = roleInfo.description;
+        role.company = { id: companyId } as any;
+
+        // Assign permissions based on roleInfo (simplification: assign all for Admin, some for others)
+        if (roleInfo.name === 'Admin') {
+          role.permissions = allPermissions;
+        } else if (roleInfo.name === 'Manager') {
+          role.permissions = allPermissions.filter(p => 
+            ['read', 'update', 'create'].includes(p.action) && 
+            ['employee', 'attendance', 'leave', 'task'].includes(p.resource)
+          );
+        } else {
+          role.permissions = allPermissions.filter(p => 
+            p.action === 'read' && 
+            ['employee', 'attendance', 'leave', 'task'].includes(p.resource)
+          );
+        }
+
+        await this.roleRepository.save(role);
+      }
+    }
+  }
+
   async deleteRole(id: string) {
     const role = await this.findOneRole(id);
 

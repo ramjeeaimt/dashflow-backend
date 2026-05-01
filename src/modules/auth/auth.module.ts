@@ -8,10 +8,17 @@ import { CompanyModule } from '../companies/company.module';
 import { UserModule } from '../users/user.module';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 
+import { AccessControlModule } from '../access-control/access-control.module';
+import { DesignationModule } from '../designations/designation.module';
+import { EmployeeModule } from '../employees/employee.module';
+
 @Module({
   imports: [
     CompanyModule,
     UserModule,
+    AccessControlModule,
+    DesignationModule,
+    EmployeeModule,
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],

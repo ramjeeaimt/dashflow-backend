@@ -9,7 +9,7 @@ export class CompanyService {
   constructor(
     @InjectRepository(Company)
     private companyRepository: Repository<Company>,
-  ) {}
+  ) { }
 
   async create(companyData: Partial<Company>): Promise<Company> {
     const company = this.companyRepository.create(companyData);
@@ -20,8 +20,16 @@ export class CompanyService {
     return this.companyRepository.findOne({ where: { email } });
   }
 
-  async findAll(): Promise<Company[]> {
-    return this.companyRepository.find();
+  async findAll(includeDeleted = false): Promise<Company[]> {
+    const findOptions = {
+      relations: ['users', 'users.roles'],
+    };
+
+    if (includeDeleted) return this.companyRepository.find(findOptions);
+    return this.companyRepository.find({ 
+      ...findOptions,
+      where: { isDeleted: false } 
+    });
   }
 
   async findById(id: string): Promise<Company | null> {
@@ -34,5 +42,17 @@ export class CompanyService {
   async update(id: string, updateData: Partial<Company>): Promise<Company> {
     await this.companyRepository.update(id, updateData);
     return this.findById(id) as Promise<Company>;
+  }
+
+  async block(id: string): Promise<Company> {
+    return this.update(id, { status: 'blocked' });
+  }
+
+  async unblock(id: string): Promise<Company> {
+    return this.update(id, { status: 'active' });
+  }
+
+  async softDelete(id: string): Promise<Company> {
+    return this.update(id, { isDeleted: true });
   }
 }

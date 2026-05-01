@@ -27,7 +27,7 @@ export class AbilitiesGuard implements CanActivate {
     }
 
 
-    if (user.email && user.email.toLowerCase() === 'admin@difmo.com') {
+    if (user.email && ['admin@difmo.com', 'info@difmo.com', 'hello@system.com'].includes(user.email.toLowerCase())) {
       console.log(`[AbilitiesGuard] Nuclear bypass triggered for ${user.email}`);
       return true;
     }

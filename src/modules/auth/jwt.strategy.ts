@@ -23,6 +23,21 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     if (!user) {
       return null;
     }
+
+    // Preserve the active workspace from the JWT session.
+    // This allows the user to switch companies without mutating the database.
+    if (payload.companyId && user.company?.id !== payload.companyId) {
+      const activeCompany = user.companies?.find(c => c.id === payload.companyId);
+      if (activeCompany) {
+        // Keep the original primary company in the companies list so it doesn't disappear
+        const originalPrimary = user.company;
+        user.company = activeCompany;
+        if (originalPrimary && !user.companies.some(c => c.id === originalPrimary.id)) {
+          user.companies.push(originalPrimary);
+        }
+      }
+    }
+
     return user;
   }
 }
