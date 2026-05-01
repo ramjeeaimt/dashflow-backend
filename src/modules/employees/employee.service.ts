@@ -179,8 +179,8 @@ export class EmployeeService {
     }
 
     if (filters?.status) {
-      console.log('[EmployeeService] Filtering by status:', filters.status);
-      query.andWhere('employee.status = :status', { status: filters.status });
+      console.log('[EmployeeService] Filtering by status (Case-Insensitive):', filters.status);
+      query.andWhere('LOWER(employee.status) = LOWER(:status)', { status: filters.status });
     }
 
     if (filters?.employmentType) {
@@ -196,6 +196,11 @@ export class EmployeeService {
     if (filters?.branch) {
       console.log('[EmployeeService] Filtering by branch:', filters.branch);
       query.andWhere('employee.branch = :branch', { branch: filters.branch });
+    }
+
+    if (filters?.roleName) {
+      console.log('[EmployeeService] Filtering by roleName (Case-Insensitive):', filters.roleName);
+      query.andWhere('UPPER(roles.name) = :roleName', { roleName: filters.roleName.toUpperCase() });
     }
 
     if (filters?.search) {

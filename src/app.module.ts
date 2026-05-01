@@ -74,15 +74,15 @@ import { JobMessage } from './modules/jobs/entities/message.entity';
         } else if (env === 'development') {
           dbUrl = configService.get<string>('DATABASE_URL_DEV') || configService.get<string>('DATABASE_URL') || configService.get<string>('DATABASE_URL_PROD');
         }
-        
+
         if (!dbUrl) {
-           dbUrl = configService.get<string>('DATABASE_URL');
+          dbUrl = configService.get<string>('DATABASE_URL');
         }
 
         console.log(`[DB_DIAGNOSTIC] Environment: ${env}`);
         console.log(`[DB_DIAGNOSTIC] DATABASE_URL_PROD defined: ${!!configService.get('DATABASE_URL_PROD')}`);
         console.log(`[DB_DIAGNOSTIC] DATABASE_URL defined: ${!!configService.get('DATABASE_URL')}`);
-        
+
         const finalUrl = dbUrl || 'NONE';
         console.log(`[DB_DIAGNOSTIC] Final Connection URL: ${finalUrl.startsWith('postgres') ? finalUrl.split('@')[1] : finalUrl}`);
 
@@ -118,7 +118,7 @@ import { JobMessage } from './modules/jobs/entities/message.entity';
             type: 'postgres',
             url: dbUrl,
             entities,
-            synchronize: env === 'development',
+            synchronize: configService.get<string>('DB_SYNCHRONIZE') === 'true' || env === 'development',
             ssl: {
               rejectUnauthorized: false,
             },

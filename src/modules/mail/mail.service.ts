@@ -80,7 +80,7 @@ export class MailService {
   async sendRoleAssignmentNotification(to: string, data: { employeeName: string; roles: string[] }) {
     await this.mailerService.sendMail({
       to,
-      subject: `Access Update: New Roles Assigned to ${data.employeeName}`,
+      subject: `Congratulations! Your New Role at DIFMO: ${data.roles.join(', ')}`,
       template: './role-assigned',
       context: {
         name: data.employeeName,

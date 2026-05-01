@@ -77,6 +77,12 @@ export class Company {
   @Column({ nullable: true })
   closingTime: string; // HH:mm format
 
+  @Column({ default: 'active' })
+  status: string; // active, blocked
+
+  @Column({ default: false })
+  isDeleted: boolean;
+
   @OneToMany(() => User, (user) => user.company)
   users: User[];
 

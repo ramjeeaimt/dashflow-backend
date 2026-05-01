@@ -33,6 +33,7 @@ export class UserService {
       ...userData,
       password: hashedPassword,
       company: companyId ? { id: companyId } : undefined,
+      companies: companyId ? [{ id: companyId }] : [],
       isActive: true,
     } as any) as unknown as User;
 
@@ -45,7 +46,7 @@ export class UserService {
   async findByEmail(email: string): Promise<User | null> {
     return this.userRepository.findOne({
       where: { email },
-      relations: ['company', 'roles', 'roles.permissions', 'permissions'],
+      relations: ['company', 'companies', 'roles', 'roles.permissions', 'permissions'],
     });
   }
 
@@ -53,7 +54,7 @@ export class UserService {
   async findById(id: string): Promise<User | null> {
     return this.userRepository.findOne({
       where: { id },
-      relations: ['company', 'roles', 'roles.permissions', 'permissions', 'department'],
+      relations: ['company', 'companies', 'roles', 'roles.permissions', 'permissions', 'department'],
     });
   }
 

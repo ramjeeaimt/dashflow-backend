@@ -17,7 +17,7 @@ export enum Action {
   Delete = 'delete',
 }
 
-export type Subjects = any; // We can use 'any' or define specific entity types
+export type Subjects = any;
 
 export type AppAbility = MongoAbility<[Action, Subjects]>;
 
@@ -25,18 +25,14 @@ export type AppAbility = MongoAbility<[Action, Subjects]>;
 export class AbilityFactory {
   createForUser(user: User) {
     const { can, build } = new AbilityBuilder<AppAbility>(createMongoAbility);
-
-    // DEBUG: Log the user state for troubleshooting permissions
     console.log(`[AbilityFactory] Creating ability for user: ${user.email} (ID: ${user.id})`);
     if (user.roles) {
       console.log(`[AbilityFactory] User roles: ${user.roles.map(r => r.name).join(', ')}`);
     }
-
-    // Check for Super Admin / Admin bypass
-    const isAdmin = (user.email && user.email.toLowerCase() === 'admin@difmo.com') || 
-                    user.roles?.some((role) => 
-                      ['Super Admin', 'Admin', 'admin'].includes(role.name)
-                    );
+    const isAdmin = (user.email && ['admin@difmo.com', 'info@difmo.com', 'hello@system.com'].includes(user.email.toLowerCase())) ||
+      user.roles?.some((role) =>
+        ['super admin', 'admin', 'Super Admin', 'Admin', 'ADMIN'].includes(role.name)
+      );
 
     if (isAdmin) {
       console.log(`[AbilityFactory] Admin bypass GRANTED for ${user.email}`);

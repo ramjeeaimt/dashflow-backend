@@ -14,12 +14,33 @@ paths:
       responses:
         "201":
           description: ""
+  /api/auth/impersonate:
+    post:
+      operationId: AuthController_impersonate
+      parameters: []
+      responses:
+        "201":
+          description: ""
   /api/auth/register:
     post:
       operationId: AuthController_register
       parameters: []
       responses:
         "201":
+          description: ""
+  /api/auth/switch-company:
+    post:
+      operationId: AuthController_switchCompany
+      parameters: []
+      responses:
+        "201":
+          description: ""
+  /api/auth/my-workspaces:
+    get:
+      operationId: AuthController_getMyWorkspaces
+      parameters: []
+      responses:
+        "200":
           description: ""
   /api/auth/profile:
     get:
@@ -34,7 +55,7 @@ paths:
       responses:
         "200":
           description: ""
-  /api/company:
+  /api/system-company:
     post:
       operationId: CompanyController_create
       parameters: []
@@ -47,7 +68,13 @@ paths:
       responses:
         "201":
           description: ""
-  /api/company/id/{id}:
+    get:
+      operationId: CompanyController_findAll
+      parameters: []
+      responses:
+        "200":
+          description: ""
+  /api/system-company/id/{id}:
     get:
       operationId: CompanyController_findById
       parameters:
@@ -59,7 +86,7 @@ paths:
       responses:
         "200":
           description: ""
-  /api/company/{email}:
+  /api/system-company/{email}:
     get:
       operationId: CompanyController_findOne
       parameters:
@@ -71,9 +98,9 @@ paths:
       responses:
         "200":
           description: ""
-  /api/company/{id}:
+  /api/system-company/{id}/block:
     patch:
-      operationId: CompanyController_update
+      operationId: CompanyController_block
       parameters:
         - name: id
           required: true
@@ -83,61 +110,21 @@ paths:
       responses:
         "200":
           description: ""
-  /api/departments:
-    post:
-      operationId: DepartmentController_create
-      parameters: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CreateDepartmentDto"
-      responses:
-        "201":
-          description: ""
-    get:
-      operationId: DepartmentController_findAll
-      parameters:
-        - name: companyId
-          required: true
-          in: query
-          schema:
-            type: string
-      responses:
-        "200":
-          description: ""
-  /api/departments/{id}:
-    get:
-      operationId: DepartmentController_findOne
-      parameters:
-        - name: id
-          required: true
-          in: path
-          schema:
-            type: string
-      responses:
-        "200":
-          description: ""
+  /api/system-company/{id}/unblock:
     patch:
-      operationId: DepartmentController_update
+      operationId: CompanyController_unblock
       parameters:
         - name: id
           required: true
           in: path
           schema:
             type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/UpdateDepartmentDto"
       responses:
         "200":
           description: ""
+  /api/system-company/{id}:
     delete:
-      operationId: DepartmentController_remove
+      operationId: CompanyController_remove
       parameters:
         - name: id
           required: true
@@ -218,6 +205,58 @@ paths:
       parameters: []
       responses:
         "201":
+          description: ""
+  /api/designations:
+    post:
+      operationId: DesignationController_create
+      parameters: []
+      responses:
+        "201":
+          description: ""
+    get:
+      operationId: DesignationController_findAll
+      parameters:
+        - name: companyId
+          required: true
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+  /api/designations/{id}:
+    get:
+      operationId: DesignationController_findOne
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+    put:
+      operationId: DesignationController_update
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+    delete:
+      operationId: DesignationController_remove
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "200":
           description: ""
   /api/employees:
     post:
@@ -378,6 +417,70 @@ paths:
     delete:
       operationId: NotificationsController_clearAll
       parameters: []
+      responses:
+        "200":
+          description: ""
+  /api/departments:
+    post:
+      operationId: DepartmentController_create
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDepartmentDto"
+      responses:
+        "201":
+          description: ""
+    get:
+      operationId: DepartmentController_findAll
+      parameters:
+        - name: companyId
+          required: true
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+  /api/departments/{id}:
+    get:
+      operationId: DepartmentController_findOne
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+    patch:
+      operationId: DepartmentController_update
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateDepartmentDto"
+      responses:
+        "200":
+          description: ""
+    delete:
+      operationId: DepartmentController_remove
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
       responses:
         "200":
           description: ""
@@ -609,58 +712,6 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/UpdateWFHRequestStatusDto"
-      responses:
-        "200":
-          description: ""
-  /api/designations:
-    post:
-      operationId: DesignationController_create
-      parameters: []
-      responses:
-        "201":
-          description: ""
-    get:
-      operationId: DesignationController_findAll
-      parameters:
-        - name: companyId
-          required: true
-          in: query
-          schema:
-            type: string
-      responses:
-        "200":
-          description: ""
-  /api/designations/{id}:
-    get:
-      operationId: DesignationController_findOne
-      parameters:
-        - name: id
-          required: true
-          in: path
-          schema:
-            type: string
-      responses:
-        "200":
-          description: ""
-    put:
-      operationId: DesignationController_update
-      parameters:
-        - name: id
-          required: true
-          in: path
-          schema:
-            type: string
-      responses:
-        "200":
-          description: ""
-    delete:
-      operationId: DesignationController_remove
-      parameters:
-        - name: id
-          required: true
-          in: path
-          schema:
-            type: string
       responses:
         "200":
           description: ""
@@ -1381,16 +1432,16 @@ components:
     CreateCompanyDto:
       type: object
       properties: {}
-    CreateDepartmentDto:
-      type: object
-      properties: {}
-    UpdateDepartmentDto:
-      type: object
-      properties: {}
     CreateEmployeeDto:
       type: object
       properties: {}
     UpdateEmployeeDto:
+      type: object
+      properties: {}
+    CreateDepartmentDto:
+      type: object
+      properties: {}
+    UpdateDepartmentDto:
       type: object
       properties: {}
     CheckInDto:

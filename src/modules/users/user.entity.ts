@@ -42,6 +42,10 @@ export class User {
   @ManyToOne(() => Company, (company) => company.users)
   company: Company;
 
+  @ManyToMany(() => Company)
+  @JoinTable({ name: 'user_companies' })
+  companies: Company[];
+
   @ManyToOne(() => Department, (department) => department.users, {
     nullable: true,
   })

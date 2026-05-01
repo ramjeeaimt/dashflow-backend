@@ -58,7 +58,8 @@ export class EmployeeController {
   @Get()
   async findAll(@Query() query: any, @Request() req: any) {
     const user = req.user;
-    const canViewAll = user.email === 'admin@difmo.com' || user.roles?.some((role) =>
+    const isSuperAdmin = ['admin@difmo.com', 'info@difmo.com', 'hello@system.com'].includes(user.email);
+    const canViewAll = isSuperAdmin || user.roles?.some((role) =>
       ['super admin', 'admin', 'ceo', 'cfo', 'manager', 'hr'].includes(role.name.toLowerCase())
     );
 
