@@ -15,10 +15,14 @@ async function bootstrap() {
 export default async (req, res) => {
   // Set CORS headers for all requests
   const allowedOrigins = [
+    'https://dashflow-frontend.vercel.app',
+    'https://dashflow-backend.vercel.app',
     'https://difmo-crm-frontend.vercel.app',
     'https://difmo-crm-backend.vercel.app',
     'http://localhost:5173',
-    'http://localhost:3000'
+    'http://localhost:5174',
+    'http://localhost:3000',
+    'http://127.0.0.1:5173'
   ];
 
   const origin = req.headers.origin;
@@ -27,7 +31,8 @@ export default async (req, res) => {
   if (isAllowed && origin) {
     res.setHeader('Access-Control-Allow-Origin', origin);
   } else {
-    res.setHeader('Access-Control-Allow-Origin', 'https://difmo-crm-frontend.vercel.app');
+    // If not allowed or no origin (e.g. direct request), still provide a valid origin for browser preflights if possible
+    res.setHeader('Access-Control-Allow-Origin', origin || 'https://dashflow-frontend.vercel.app');
   }
 
   res.setHeader('Access-Control-Allow-Credentials', 'true');

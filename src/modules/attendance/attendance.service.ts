@@ -230,7 +230,7 @@ export class AttendanceService {
           this.notificationsService.send({
             title: 'Late Check-in',
             message: `You checked in late at ${checkInTime}. Scheduled time: ${targetTime}.`,
-            type: 'realtime',
+            type: 'both',
             recipientFilter: 'custom',
             recipientIds: [resolvedEmployee.userId],
             companyId: resolvedEmployee.companyId,
@@ -241,7 +241,7 @@ export class AttendanceService {
           this.notificationsService.send({
             title: 'Early Check-in',
             message: `You checked in early at ${checkInTime}. Scheduled time: ${targetTime}.`,
-            type: 'realtime',
+            type: 'both',
             recipientFilter: 'custom',
             recipientIds: [resolvedEmployee.userId],
             companyId: resolvedEmployee.companyId,

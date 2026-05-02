@@ -13,6 +13,8 @@ export function setupApp(app: INestApplication) {
   app.enableCors({
     origin: (origin, callback) => {
       const allowedOrigins = [
+        'https://dashflow-frontend.vercel.app',
+        'https://dashflow-backend.vercel.app',
         'https://difmo-crm-frontend.vercel.app',
         'https://difmo-crm-backend.vercel.app',
         'http://localhost:5173',
