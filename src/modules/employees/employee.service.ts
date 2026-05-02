@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Employee } from './employee.entity';
@@ -35,6 +35,15 @@ export class EmployeeService {
         createEmployeeDto.email,
       );
       if (existingUser) {
+        // Check if this user is already an employee in the same company
+        const existingEmployee = await this.employeeRepository.findOne({
+          where: { userId: existingUser.id, companyId: createEmployeeDto.companyId },
+        });
+        if (existingEmployee) {
+          throw new ConflictException(
+            `An employee with the email "${createEmployeeDto.email}" already exists in this company.`,
+          );
+        }
         userId = existingUser.id;
       } else {
         const newUser = await this.userService.create({

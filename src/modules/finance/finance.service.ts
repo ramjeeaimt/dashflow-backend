@@ -202,10 +202,10 @@ export class FinanceService {
 
 
   async generateMonthlyPayroll(month: number, year: number) {
-    // Get all employees
-    const employees = await this.employeeRepository.find();
+    // Get all employees with company relation to read policy settings
+    const employees = await this.employeeRepository.find({ relations: ['company'] });
 
-    // Default payroll settings (can later make this dynamic per admin input)
+    // Default payroll settings (overridden by per-company config when available)
     const defaultWorkingHours = 8;
     const defaultOvertimeRate = 100;
     const defaultFreeLeaves = 4;
@@ -254,15 +254,19 @@ export class FinanceService {
         }
       }
 
-      const basicSalary = this.parseSalary(emp.salary) || 20000; // Employee base salary
+      const basicSalary = this.parseSalary(emp.salary) || 20000;
       const perDay = basicSalary / 30;
 
-      // Leaves deduction logic: first 4 leaves free
-      const extraLeaves = leaveDays > defaultFreeLeaves ? leaveDays - defaultFreeLeaves : 0;
+      // Use company-configured half-day pay percent if available, else default to 50%
+      const halfPercent = emp.company?.halfDayPayPercent ?? defaultHalfPercent;
+      const freeLeaves = defaultFreeLeaves;
+
+      // Leaves deduction logic: first N leaves free
+      const extraLeaves = leaveDays > freeLeaves ? leaveDays - freeLeaves : 0;
       const leaveDeduction = extraLeaves * perDay + absentDays * perDay;
 
-      // Half-day deduction
-      const halfDeduction = halfDays * (perDay * (defaultHalfPercent / 100));
+      // Half-day deduction uses company-configured percentage
+      const halfDeduction = halfDays * (perDay * (halfPercent / 100));
 
       // Overtime pay
       const overtimePay = overtimeHours * defaultOvertimeRate;
@@ -274,7 +278,7 @@ export class FinanceService {
       totalNet += netSalary;
       totalDeduction += leaveDeduction + halfDeduction;
 
-      // Save payroll record
+      // Save payroll record (persist the actual percent used for audit trail)
       const payroll = this.payrollRepository.create({
         employeeId: emp.id,
         companyId: emp.companyId,
@@ -284,8 +288,8 @@ export class FinanceService {
         year,
         workingHoursPerDay: defaultWorkingHours,
         overtimeRate: defaultOvertimeRate,
-        freeLeaves: defaultFreeLeaves,
-        halfDayPercent: defaultHalfPercent,
+        freeLeaves,
+        halfDayPercent: halfPercent,
         status: 'unpaid',
       });
 

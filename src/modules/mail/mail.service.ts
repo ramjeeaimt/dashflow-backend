@@ -48,24 +48,59 @@ export class MailService {
     });
   }
 
-  async sendCheckInEmail(to: string, data: { employeeName: string; time: string; status: string; date: string }) {
+  async sendCheckInEmail(to: string, data: {
+    employeeName: string; time: string; status: string; date: string;
+    companyName?: string; companyLogo?: string; companyAddress?: string; companyEmail?: string;
+  }) {
+    const isLate = data.status === 'late';
     await this.mailerService.sendMail({
       to,
-      subject: `Check-in Recorded: ${data.employeeName} - ${data.date}`,
+      subject: isLate
+        ? `⚠️ Late Check-in Alert: ${data.employeeName} - ${data.date}`
+        : `Check-in Confirmed: ${data.employeeName} - ${data.date}`,
       template: './check-in',
       context: {
         name: data.employeeName,
         time: data.time,
         status: data.status,
         date: data.date,
+        isLate,
+        companyName: data.companyName || 'Difmo CRM',
+        companyLogo: data.companyLogo || '',
+        companyAddress: data.companyAddress || '',
+        companyEmail: data.companyEmail || '',
       },
     });
   }
 
-  async sendCheckOutEmail(to: string, data: { employeeName: string; time: string; date: string; workHours: number; overtime: number }) {
+  async sendLateWarningEmail(to: string, data: {
+    employeeName: string; checkInTime: string; scheduledTime: string; date: string;
+    companyName?: string; companyLogo?: string; companyAddress?: string; companyEmail?: string;
+  }) {
     await this.mailerService.sendMail({
       to,
-      subject: `Check-out Recorded: ${data.employeeName} - ${data.date}`,
+      subject: `⚠️ Late Arrival Warning – ${data.date}`,
+      template: './late-warning',
+      context: {
+        name: data.employeeName,
+        checkInTime: data.checkInTime,
+        scheduledTime: data.scheduledTime,
+        date: data.date,
+        companyName: data.companyName || 'Difmo CRM',
+        companyLogo: data.companyLogo || '',
+        companyAddress: data.companyAddress || '',
+        companyEmail: data.companyEmail || '',
+      },
+    });
+  }
+
+  async sendCheckOutEmail(to: string, data: {
+    employeeName: string; time: string; date: string; workHours: number; overtime: number;
+    companyName?: string; companyLogo?: string; companyAddress?: string; companyEmail?: string;
+  }) {
+    await this.mailerService.sendMail({
+      to,
+      subject: `Check-out Summary: ${data.employeeName} - ${data.date}`,
       template: './check-out',
       context: {
         name: data.employeeName,
@@ -73,6 +108,10 @@ export class MailService {
         date: data.date,
         workHours: data.workHours.toFixed(2),
         overtime: data.overtime.toFixed(2),
+        companyName: data.companyName || 'Difmo CRM',
+        companyLogo: data.companyLogo || '',
+        companyAddress: data.companyAddress || '',
+        companyEmail: data.companyEmail || '',
       },
     });
   }

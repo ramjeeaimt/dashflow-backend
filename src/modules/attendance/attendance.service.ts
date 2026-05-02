@@ -118,10 +118,8 @@ export class AttendanceService {
       const checkInTime = ist.timeString;
 
       // 3. Geofencing Check - apply based on employeeType and workFromHome flag
-      // Skip geofence if employee has an approved WFH request for today
       const onApprovedWFH = await this.wfhRequestsService.isEmployeeOnWFH(employeeRecord.id, today);
       console.log('[AttendanceService] onApprovedWFH:', onApprovedWFH);
-      this['onApprovedWFH'] = onApprovedWFH; // Store for later use in status
 
       const requiresGeofenceCheck =
         !onApprovedWFH && (
@@ -151,14 +149,30 @@ export class AttendanceService {
         const [openHour, openMinute] = employeeRecord.company.openingTime
           .split(':')
           .map(Number);
+        const openTotalMinutes = openHour * 60 + openMinute;
+        const nowTotalMinutes = ist.hours * 60 + ist.minutes;
 
-        // Allow check-in 1 hour before opening time
-        const earliestHour = openHour - 1;
+        // Use company-configured buffer (default 60 min before opening)
+        const earlyBuffer = employeeRecord.company.earlyCheckInBuffer ?? 60;
+        const earliestMinutes = openTotalMinutes - earlyBuffer;
+        const earliestHour = Math.floor(earliestMinutes / 60);
+        const earliestMin = earliestMinutes % 60;
 
-        if (ist.hours < earliestHour) {
-          const earliestStr = `${earliestHour.toString().padStart(2, '0')}:${openMinute.toString().padStart(2, '0')}`;
+        if (nowTotalMinutes < earliestMinutes) {
+          const earliestStr = `${earliestHour.toString().padStart(2, '0')}:${earliestMin.toString().padStart(2, '0')}`;
           throw new ForbiddenException(
-            `Cannot check in before ${earliestStr} AM.`,
+            `Check-in is not allowed before ${earliestStr}. Please wait until then.`,
+          );
+        }
+
+        // Use company-configured cutoff (default 240 min = 4 hours after opening)
+        const cutoffMinutes = employeeRecord.company.checkInCutoffMinutes ?? 240;
+        if (cutoffMinutes > 0 && nowTotalMinutes > openTotalMinutes + cutoffMinutes) {
+          const cutoffHour = Math.floor((openTotalMinutes + cutoffMinutes) / 60);
+          const cutoffMin = (openTotalMinutes + cutoffMinutes) % 60;
+          const cutoffStr = `${cutoffHour.toString().padStart(2, '0')}:${cutoffMin.toString().padStart(2, '0')}`;
+          throw new ForbiddenException(
+            `Check-in window has closed. The latest allowed check-in was ${cutoffStr}.`,
           );
         }
       }
@@ -188,88 +202,104 @@ export class AttendanceService {
     const ist = this.getISTTimeParts();
     const checkInTime = ist.timeString;
 
-    // Determine status with specific late/early rules
     let status = 'present';
+    let isLate = false;
+    let onApprovedWFH = false;
+    let resolvedEmployee: Employee | null = null;
+
     try {
-      const employee = await this.employeeService.findOne(checkInDto.employeeId);
-      if (!employee) throw new Error('Employee not found');
+      resolvedEmployee = await this.employeeService.findOne(checkInDto.employeeId);
+      if (!resolvedEmployee) throw new Error('Employee not found');
 
-      const specialEmployees = ['anuskapadit', 'khushhi', 'rahul', 'shadhna', 'simran'];
-      const employeeIdentifier = `${employee.user?.firstName || ''} ${employee.user?.lastName || ''} ${employee.user?.email || ''}`.toLowerCase();
+      onApprovedWFH = await this.wfhRequestsService.isEmployeeOnWFH(resolvedEmployee.id, today);
 
-      // Resolve Target Time
-      let targetTime = employee.checkInTime; // Using the new column
-      if (!targetTime) {
-        const isSpecial = specialEmployees.some(name => employeeIdentifier.includes(name));
-        targetTime = isSpecial ? '09:15' : '10:15';
-      }
+      const targetTime =
+        resolvedEmployee.checkInTime ||
+        resolvedEmployee.company?.openingTime ||
+        '10:00';
 
-      const [targetHour, targetMinute] = targetTime.split(':').map(Number);
-      const targetTotalMinutes = targetHour * 60 + targetMinute;
-      const checkInTotalMinutes = ist.hours * 60 + ist.minutes;
+      if (targetTime) {
+        const [targetHour, targetMinute] = targetTime.split(':').map(Number);
+        const lateThreshold = resolvedEmployee.company?.lateThresholdMinutes ?? 0;
+        const targetTotalMinutes = targetHour * 60 + targetMinute + lateThreshold;
+        const checkInTotalMinutes = ist.hours * 60 + ist.minutes;
 
-      if (checkInTotalMinutes > targetTotalMinutes) {
-        status = 'late';
-        // Send notification about late check-in
-        try {
-          await this.notificationsService.send({
+        if (checkInTotalMinutes > targetTotalMinutes) {
+          status = 'late';
+          isLate = true;
+          this.notificationsService.send({
             title: 'Late Check-in',
             message: `You checked in late at ${checkInTime}. Scheduled time: ${targetTime}.`,
             type: 'realtime',
-            recipientFilter: 'employees',
-            recipientIds: [employee.userId],
-            companyId: employee.companyId,
+            recipientFilter: 'custom',
+            recipientIds: [resolvedEmployee.userId],
+            companyId: resolvedEmployee.companyId,
             metadata: { type: 'attendance', severity: 'warning' },
-          });
-        } catch (nErr) {
-          console.error('[AttendanceService] Notification error:', nErr);
-        }
-      } else if (checkInTotalMinutes < targetTotalMinutes) {
-        status = 'early_checkin';
-        // Notify about early check-in
-        try {
-          await this.notificationsService.send({
+          }).catch(nErr => console.error('[AttendanceService] Notification error:', nErr));
+        } else if (checkInTotalMinutes < targetHour * 60 + targetMinute) {
+          status = 'early_checkin';
+          this.notificationsService.send({
             title: 'Early Check-in',
             message: `You checked in early at ${checkInTime}. Scheduled time: ${targetTime}.`,
             type: 'realtime',
-            recipientFilter: 'employees',
-            recipientIds: [employee.userId],
-            companyId: employee.companyId,
+            recipientFilter: 'custom',
+            recipientIds: [resolvedEmployee.userId],
+            companyId: resolvedEmployee.companyId,
             metadata: { type: 'attendance', severity: 'info' },
-          });
-        } catch (nErr) {
-          console.error('[AttendanceService] Notification error:', nErr);
+          }).catch(nErr => console.error('[AttendanceService] Notification error:', nErr));
         }
       }
     } catch (e) {
       console.error('[AttendanceService] Error determining status:', e);
     }
 
-    console.log('[AttendanceService] Status:', status);
+    const finalStatus = onApprovedWFH ? 'wfh' : status;
 
     const attendance = this.attendanceRepository.create({
       employeeId: checkInDto.employeeId,
       date: today as any,
       checkInTime,
-      status: this['onApprovedWFH'] ? 'wfh' : status,
-      location: this['onApprovedWFH'] ? 'WFH' : (checkInDto.location || 'Office'),
+      status: finalStatus,
+      location: onApprovedWFH ? 'WFH' : (checkInDto.location || 'Office'),
       notes: checkInDto.notes,
     });
 
-    console.log('[AttendanceService] Saving attendance record...');
+    console.log(`[AttendanceService] Saving attendance record for employee ${checkInDto.employeeId} with status: ${finalStatus}`);
     try {
       const saved = await this.attendanceRepository.save(attendance);
       console.log('[AttendanceService] Success! ID:', saved.id);
 
-      // Trigger Email Notification
-      const employee = await this.employeeService.findOne(saved.employeeId);
+      // Trigger Email Notifications
+      const employee = resolvedEmployee || await this.employeeService.findOne(saved.employeeId);
       if (employee?.user?.email) {
+        const empName = `${employee.user.firstName} ${employee.user.lastName}`;
+        const company = employee.company;
+        const companyCtx = {
+          companyName: company?.name || 'Your Company',
+          companyLogo: company?.logo || '',
+          companyAddress: [company?.address, company?.city, company?.country].filter(Boolean).join(', '),
+          companyEmail: company?.email || '',
+        };
+
+        // Always send standard check-in confirmation
         this.mailService.sendCheckInEmail(employee.user.email, {
-          employeeName: `${employee.user.firstName} ${employee.user.lastName}`,
+          employeeName: empName,
           time: saved.checkInTime,
           status: saved.status,
           date: today,
+          ...companyCtx,
         }).catch(err => console.error('[AttendanceService] Check-in email failed:', err));
+
+        // Send late warning email if applicable
+        if (isLate && (company?.enableLateEmailAlert !== false)) {
+          this.mailService.sendLateWarningEmail(employee.user.email, {
+            employeeName: empName,
+            checkInTime: saved.checkInTime,
+            scheduledTime: employee.checkInTime || company?.openingTime || '',
+            date: today,
+            ...companyCtx,
+          }).catch(err => console.error('[AttendanceService] Late warning email failed:', err));
+        }
       }
 
       return saved;
@@ -369,12 +399,17 @@ export class AttendanceService {
 
     // Trigger Email Notification
     if (employee?.user?.email) {
+      const co = employee.company;
       this.mailService.sendCheckOutEmail(employee.user.email, {
         employeeName: `${employee.user.firstName} ${employee.user.lastName}`,
         time: saved.checkOutTime,
         date: saved.date as any,
         workHours: saved.workHours || 0,
         overtime: saved.overtime || 0,
+        companyName: co?.name || 'Your Company',
+        companyLogo: co?.logo || '',
+        companyAddress: [co?.address, co?.city, co?.country].filter(Boolean).join(', '),
+        companyEmail: co?.email || '',
       }).catch(err => console.error('[AttendanceService] Check-out email failed:', err));
     }
 
@@ -638,5 +673,34 @@ export class AttendanceService {
     }
 
     return this.attendanceRepository.save(attendance);
+  }
+
+  async revoke(employeeId: string): Promise<{ message: string }> {
+    const today = this.getISTDateString();
+
+    // Resolve employee first (handles userId vs employeeId)
+    let emp = await this.employeeService.findOne(employeeId);
+    if (!emp) {
+      emp = await this.employeeService.findByUserId(employeeId);
+    }
+
+    if (!emp) {
+      throw new NotFoundException('Employee not found');
+    }
+
+    const attendance = await this.attendanceRepository.findOne({
+      where: {
+        employeeId: emp.id,
+        date: today as any,
+      },
+    });
+
+    if (!attendance) {
+      throw new NotFoundException('No attendance record found for today to revoke.');
+    }
+
+    await this.attendanceRepository.remove(attendance);
+
+    return { message: 'Attendance record revoked successfully. You can now check in again.' };
   }
 }

@@ -98,6 +98,29 @@ paths:
       responses:
         "200":
           description: ""
+  /api/system-company/{id}:
+    patch:
+      operationId: CompanyController_update
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+    delete:
+      operationId: CompanyController_remove
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
   /api/system-company/{id}/block:
     patch:
       operationId: CompanyController_block
@@ -113,18 +136,6 @@ paths:
   /api/system-company/{id}/unblock:
     patch:
       operationId: CompanyController_unblock
-      parameters:
-        - name: id
-          required: true
-          in: path
-          schema:
-            type: string
-      responses:
-        "200":
-          description: ""
-  /api/system-company/{id}:
-    delete:
-      operationId: CompanyController_remove
       parameters:
         - name: id
           required: true
@@ -583,6 +594,18 @@ paths:
             type: string
       responses:
         "200":
+          description: ""
+  /api/attendance/revoke/{employeeId}:
+    post:
+      operationId: AttendanceController_revoke
+      parameters:
+        - name: employeeId
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "201":
           description: ""
   /api/leaves:
     post:

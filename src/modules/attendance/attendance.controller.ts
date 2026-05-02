@@ -81,4 +81,10 @@ export class AttendanceController {
   async update(@Param('id') id: string, @Body() data: any) {
     return this.attendanceService.update(id, data);
   }
+
+  @Post('revoke/:employeeId')
+  @CheckAbilities({ action: Action.Delete, subject: 'attendance' })
+  async revoke(@Param('employeeId') employeeId: string) {
+    return this.attendanceService.revoke(employeeId);
+  }
 }

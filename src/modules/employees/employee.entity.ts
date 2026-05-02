@@ -32,7 +32,7 @@ export class Employee {
   @Column({ unique: true, nullable: true })
   employeeCode: string;
 
-  @ManyToOne(() => Company, (company) => company.users)
+  @ManyToOne(() => Company)
   company: Company;
 
   @Column({ nullable: true })

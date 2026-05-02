@@ -77,6 +77,41 @@ export class Company {
   @Column({ nullable: true })
   closingTime: string; // HH:mm format
 
+  // ── Attendance Policy ──────────────────────────────────────────────
+  @Column({ type: 'int', default: 0 })
+  lateThresholdMinutes: number; // minutes after openingTime before marked late
+
+  @Column({ type: 'int', default: 60 })
+  earlyCheckInBuffer: number; // minutes before openingTime check-in is allowed
+
+  @Column({ type: 'int', default: 240 })
+  checkInCutoffMinutes: number; // minutes after openingTime after which check-in is blocked
+
+  @Column({ type: 'int', default: 4 })
+  halfDayMinHours: number; // hours worked that constitutes a half-day
+
+  @Column({ type: 'int', default: 50 })
+  halfDayPayPercent: number; // pay % for a half-day (affects payroll)
+
+  @Column({ default: true })
+  enableLateEmailAlert: boolean; // send warning email on late check-in
+
+  // ── Reward System ──────────────────────────────────────────────────
+  @Column({ default: false })
+  enableRewardSystem: boolean;
+
+  @Column({ type: 'int', default: 10 })
+  rewardPointsPerDay: number; // points earned for on-time attendance
+
+  @Column({ type: 'int', default: 5 })
+  rewardPointsLateDeduction: number; // points deducted for late check-in
+
+  @Column({ type: 'int', default: 100 })
+  rewardRedemptionThreshold: number; // points required to claim a reward
+
+  @Column({ nullable: true })
+  rewardDescription: string; // what the employee earns (e.g. "Gift voucher ₹500")
+
   @Column({ default: 'active' })
   status: string; // active, blocked
 

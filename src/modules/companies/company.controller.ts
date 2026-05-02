@@ -48,6 +48,12 @@ export class CompanyController {
     return this.companyService.findByEmail(email);
   }
 
+  @Patch(':id')
+  @UseGuards(JwtAuthGuard)
+  update(@Param('id') id: string, @Body() updateCompanyDto: any) {
+    return this.companyService.update(id, updateCompanyDto);
+  }
+
   @Patch(':id/block')
   @UseGuards(JwtAuthGuard)
   async block(@Param('id') id: string, @Request() req: any) {

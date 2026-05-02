@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f1f5f9; color: #334155; }
+    .wrapper { max-width: 600px; margin: 32px auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.08); }
+    .header { background: linear-gradient(135deg, #7f1d1d 0%, #dc2626 100%); padding: 28px 32px; display: flex; align-items: center; gap: 16px; }
+    .header img.logo { height: 44px; width: auto; border-radius: 6px; background: #fff; padding: 4px; }
+    .header-text h1 { color: #ffffff; font-size: 18px; font-weight: 700; }
+    .header-text p { color: rgba(255,255,255,0.75); font-size: 12px; margin-top: 2px; }
+    .alert-box { margin: 0; background: #fef2f2; border: 1px solid #fecaca; }
+    .alert-inner { padding: 24px 32px; display: flex; gap: 16px; align-items: flex-start; }
+    .alert-icon { font-size: 36px; flex-shrink: 0; }
+    .alert-title { font-size: 20px; font-weight: 800; color: #991b1b; }
+    .alert-subtitle { font-size: 13px; color: #b91c1c; margin-top: 4px; line-height: 1.5; }
+    .body { padding: 32px; }
+    .greeting { font-size: 15px; color: #1e293b; margin-bottom: 20px; }
+    .info-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; }
+    .info-row { display: flex; align-items: center; padding: 14px 20px; border-bottom: 1px solid #e2e8f0; }
+    .info-row:last-child { border-bottom: none; }
+    .info-label { width: 150px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #94a3b8; flex-shrink: 0; }
+    .info-value { font-size: 14px; font-weight: 600; color: #0f172a; }
+    .info-value.late { color: #dc2626; }
+    .notice { margin-top: 24px; padding: 18px 20px; background: #fff7ed; border: 1px solid #fed7aa; border-radius: 10px; border-left: 4px solid #f97316; }
+    .notice p { font-size: 13px; color: #92400e; line-height: 1.7; }
+    .footer { background: #0f172a; padding: 24px 32px; }
+    .footer-company { font-size: 13px; font-weight: 700; color: #ffffff; margin-bottom: 4px; }
+    .footer-address { font-size: 11px; color: #94a3b8; line-height: 1.6; }
+    .footer-divider { border: none; border-top: 1px solid #1e293b; margin: 16px 0; }
+    .footer-copy { font-size: 11px; color: #475569; text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <!-- Header -->
+    <div class="header">
+      {{#if companyLogo}}
+        <img class="logo" src="{{companyLogo}}" alt="{{companyName}}" />
+      {{/if}}
+      <div class="header-text">
+        <h1>{{companyName}}</h1>
+        <p>Attendance Management System</p>
+      </div>
+    </div>
+
+    <!-- Alert Box -->
+    <div class="alert-box">
+      <div class="alert-inner">
+        <span class="alert-icon">⚠️</span>
+        <div>
+          <div class="alert-title">Late Arrival Warning</div>
+          <div class="alert-subtitle">This is an official notice that your attendance has been marked as <strong>LATE</strong> for {{date}}.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Body -->
+    <div class="body">
+      <p class="greeting">Dear <strong>{{name}}</strong>,</p>
+      <p style="font-size:14px;color:#475569;margin-top:8px;">Your check-in time on <strong>{{date}}</strong> was recorded after your scheduled start time. Please review the details below.</p>
+
+      <div class="info-card" style="margin-top:20px;">
+        <div class="info-row">
+          <span class="info-label">Date</span>
+          <span class="info-value">{{date}}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Scheduled Time</span>
+          <span class="info-value">{{scheduledTime}}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Actual Check-In</span>
+          <span class="info-value late">{{checkInTime}} &nbsp;⚠️</span>
+        </div>
+      </div>
+
+      <div class="notice">
+        <p>⚡ <strong>Please Note:</strong> Consistent late arrivals may affect your performance evaluation and could result in payroll deductions as per company policy. If you had a valid reason for the delay, please inform your manager at the earliest.</p>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+      {{#if companyAddress}}
+        <p class="footer-company">{{companyName}}</p>
+        <p class="footer-address">📍 {{companyAddress}}{{#if companyEmail}} &nbsp;|&nbsp; ✉️ {{companyEmail}}{{/if}}</p>
+      {{/if}}
+      <hr class="footer-divider" />
+      <p class="footer-copy">This is an automated attendance alert. &copy; {{companyName}}. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html>
