@@ -44,6 +44,7 @@ export class AbilityFactory {
     // Baseline rule: All users can read their own employee profile
     if (user.id) {
       can(Action.Read, 'employee' as any, { userId: user.id } as any);
+      can(Action.Read, 'payroll' as any);
     }
 
     if (user.roles) {
