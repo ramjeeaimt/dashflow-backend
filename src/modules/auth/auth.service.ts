@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { CompanyService } from '../companies/company.service';
 import { UserService } from '../users/user.service';
@@ -204,6 +204,14 @@ export class AuthService {
   async register(data: any) {
     console.log('Registering with data:', JSON.stringify(data));
     try {
+      const emailToUse = data.companyEmail || data.email;
+
+      // Check if company already exists
+      const existingCompany = await this.companyService.findByEmail(emailToUse);
+      if (existingCompany) {
+        throw new BadRequestException(`Company with email ${emailToUse} is already registered.`);
+      }
+
       // 1. Create Company
       const company = await this.companyService.create({
         name: data.companyName,
@@ -288,7 +296,8 @@ export class AuthService {
         console.error('[AuthService] Failed to setup founder employee/role:', roleError);
       }
 
-      return { company, user };
+      // 5. Return full login response (token + user data)
+      return this.login(user);
     } catch (error) {
       console.error('Registration Error:', error);
       throw error;
