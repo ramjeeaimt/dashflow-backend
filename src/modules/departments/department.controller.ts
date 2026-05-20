@@ -8,6 +8,7 @@ import {
   Delete,
   Query,
   UseGuards,
+  Request,
 } from '@nestjs/common';
 import { DepartmentService } from './department.service';
 import { CreateDepartmentDto } from './dto/create-department.dto';
@@ -25,8 +26,11 @@ export class DepartmentController {
   }
 
   @Get()
-  findAll(@Query('companyId') companyId?: string) {
-    return this.departmentService.findAll(companyId);
+  findAll(@Query('companyId') companyId?: string, @Request() req?: any) {
+    const user = req?.user;
+    const isSuperAdmin = user && ['admin@difmo.com', 'info@difmo.com', 'hello@system.com'].includes(user.email);
+    const finalCompanyId = (!isSuperAdmin && user?.company?.id) ? user.company.id : companyId;
+    return this.departmentService.findAll(finalCompanyId);
   }
 
   @Get(':id')

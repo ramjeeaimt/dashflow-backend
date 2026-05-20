@@ -1434,6 +1434,53 @@ paths:
       responses:
         "201":
           description: ""
+  /api/email-templates:
+    post:
+      operationId: EmailTemplatesController_create
+      parameters: []
+      responses:
+        "201":
+          description: ""
+    get:
+      operationId: EmailTemplatesController_findAll
+      parameters: []
+      responses:
+        "200":
+          description: ""
+  /api/email-templates/{id}:
+    get:
+      operationId: EmailTemplatesController_findOne
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+    patch:
+      operationId: EmailTemplatesController_update
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+    delete:
+      operationId: EmailTemplatesController_remove
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
 info:
   title: Difmo CRM API
   description: The Difmo CRM API description

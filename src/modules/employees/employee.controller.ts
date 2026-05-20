@@ -50,8 +50,11 @@ export class EmployeeController {
 
   @Get('stats/count')
   @CheckAbilities({ action: Action.Read, subject: 'employee' })
-  async getCount(@Query('companyId') companyId?: string) {
-    const count = await this.employeeService.count(companyId);
+  async getCount(@Query('companyId') companyId?: string, @Request() req?: any) {
+    const user = req?.user;
+    const isSuperAdmin = user && ['admin@difmo.com', 'info@difmo.com', 'hello@system.com'].includes(user.email);
+    const finalCompanyId = (!isSuperAdmin && user?.company?.id) ? user.company.id : companyId;
+    const count = await this.employeeService.count(finalCompanyId);
     return { count };
   }
 
@@ -68,6 +71,11 @@ export class EmployeeController {
       if (!query.userId || query.userId !== user.id) {
         throw new ForbiddenException('You can only access your own employee record.');
       }
+    }
+
+    // Force filtering by logged-in user's active company
+    if (!isSuperAdmin && user?.company?.id) {
+      query.companyId = user.company.id;
     }
 
     const employees = await this.employeeService.findAll(query);

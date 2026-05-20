@@ -546,6 +546,14 @@ export class FinanceService {
     doc.moveTo(40, currentY).lineTo(555, currentY).strokeColor('#000').lineWidth(1).stroke();
     currentY += 25;
 
+    // Optional Notes Section
+    if (payroll.notes) {
+      doc.fillColor('#0f172a').fontSize(11).font('Helvetica-Bold').text('Manager Reminders & Notes', 40, currentY);
+      currentY += 15;
+      doc.fontSize(10).font('Helvetica').fillColor('#475569').text(payroll.notes, 40, currentY, { width: 515, align: 'left' });
+      currentY += 40; // Add space after notes
+    }
+
     const sigX = 50;
     const contactX = 350;
 
@@ -661,8 +669,13 @@ export class FinanceService {
   async getFinancialSummary(companyId: string, month?: number, year?: number, targetCurrency: string = 'INR') {
     const where: any = { companyId };
 
-    let expenses = await this.expenseRepository.find({ where });
-    let payrolls = await this.payrollRepository.find({ where: { ...where, status: 'paid' } });
+    const [expensesRaw, payrollsRaw] = await Promise.all([
+      this.expenseRepository.find({ where }),
+      this.payrollRepository.find({ where: { ...where, status: 'paid' } }),
+    ]);
+
+    let expenses = expensesRaw;
+    let payrolls = payrollsRaw;
 
     if (month || year) {
       expenses = expenses.filter(e => {
@@ -734,7 +747,7 @@ export class FinanceService {
     return { message: 'Payroll deleted successfully' };
   }
 
-  async sendPayrollEmail(id: string) {
+  async sendPayrollEmail(id: string, customHtml?: string, customNotes?: string) {
     const payroll = await this.payrollRepository.findOne({
       where: { id },
       relations: ['employee', 'employee.user']
@@ -742,6 +755,11 @@ export class FinanceService {
 
     if (!payroll) throw new NotFoundException('Payroll not found');
     if (!payroll.employee?.user?.email) throw new Error('Employee email not found');
+
+    if (customNotes !== undefined) {
+      payroll.notes = customNotes;
+      await this.payrollRepository.save(payroll);
+    }
 
     const netSal = this.parseSalary(payroll.netSalary);
 
@@ -766,7 +784,9 @@ export class FinanceService {
         type: 'PAYROLL_GENERATED',
         month: payroll.month,
         year: payroll.year,
-        netSalary: netSal
+        netSalary: netSal,
+        useCustomHtml: !!customHtml,
+        customHtml: customHtml || undefined
       }
     });
 

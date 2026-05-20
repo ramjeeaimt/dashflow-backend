@@ -104,6 +104,14 @@ export class NotificationsService implements OnModuleInit {
         const batch = this.firestore.batch();
         const timestamp = admin.firestore.FieldValue.serverTimestamp();
 
+        // Sanitize metadata to remove any undefined properties
+        const cleanMetadata = { ...metadata };
+        Object.keys(cleanMetadata).forEach(key => {
+            if (cleanMetadata[key] === undefined) {
+                delete cleanMetadata[key];
+            }
+        });
+
         userIds.forEach(userId => {
             if (!userId) return;
             const docRef = this.firestore.collection('notifications').doc();
@@ -113,9 +121,9 @@ export class NotificationsService implements OnModuleInit {
                 message,
                 read: false,
                 timestamp,
-                type: metadata?.type || 'system',
-                priority: metadata?.priority || 'medium',
-                ...metadata
+                type: cleanMetadata?.type || 'system',
+                priority: cleanMetadata?.priority || 'medium',
+                ...cleanMetadata
             });
         });
 
@@ -232,7 +240,9 @@ export class NotificationsService implements OnModuleInit {
 
         for (const email of emails) {
             try {
-                const htmlContent = this.getEmailTemplate(metadata.type, title, message, metadata);
+                const htmlContent = (metadata?.useCustomHtml && metadata?.customHtml)
+                    ? metadata.customHtml
+                    : this.getEmailTemplate(metadata.type, title, message, metadata);
                 const finalSubject = title.includes('Difmo') ? title : `Difmo Pvt Ltd - ${title}`;
                 this.logger.log(`[Email] Sending template '${metadata.type}' to ${email} with subject: ${finalSubject}`);
                 await this.mailerService.sendMail({

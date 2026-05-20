@@ -15,7 +15,8 @@ export class CreateLeaveDto {
 
   @IsString()
   @IsEnum(['PENDING', 'APPROVED', 'REJECTED', 'pending', 'approved', 'rejected'])
-  status: string;
+  @IsOptional()
+  status?: string;
 
   @IsString()
   @IsOptional()

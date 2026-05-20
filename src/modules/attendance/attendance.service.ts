@@ -70,6 +70,34 @@ export class AttendanceService {
     return { hours, minutes, seconds, timeString: istString };
   }
 
+  private async getAdminEmails(employee: Employee): Promise<string[]> {
+    const adminEmails: string[] = [];
+    try {
+      if (employee?.company?.attendanceAlertEmails) {
+        const configuredEmails = employee.company.attendanceAlertEmails
+          .split(',')
+          .map(email => email.trim())
+          .filter(Boolean);
+        adminEmails.push(...configuredEmails);
+      }
+      
+      const companyId = employee?.companyId;
+      if (companyId) {
+        const allEmployees = await this.employeeService.findAll({ companyId });
+        const companyAdmins = allEmployees
+          .filter(emp => emp.user?.email && emp.user?.roles?.some(role => ['admin', 'super admin', 'superadmin', 'manager'].includes(role.name.toLowerCase())))
+          .map(emp => emp.user.email);
+        adminEmails.push(...companyAdmins);
+      }
+      if (employee?.company?.email) {
+        adminEmails.push(employee.company.email);
+      }
+    } catch (err) {
+      console.error('[AttendanceService] Failed to resolve admin emails:', err);
+    }
+    return [...new Set(adminEmails)].filter(email => !!email);
+  }
+
   async checkIn(checkInDto: CheckInDto): Promise<Attendance> {
     console.log('[AttendanceService] checkIn initiated for employeeId:', checkInDto.employeeId);
     const today = this.getISTDateString();
@@ -143,17 +171,19 @@ export class AttendanceService {
         }
       }
 
-      if (employeeRecord.company && employeeRecord.company.openingTime) {
-        console.log('[AttendanceService] Opening Time:', employeeRecord.company.openingTime);
+      const targetOpeningTime = employeeRecord.startTime || employeeRecord.checkInTime || (employeeRecord.company ? employeeRecord.company.openingTime : null);
+
+      if (targetOpeningTime) {
+        console.log('[AttendanceService] Opening Time (Employee or Company):', targetOpeningTime);
         const ist = this.getISTTimeParts();
-        const [openHour, openMinute] = employeeRecord.company.openingTime
+        const [openHour, openMinute] = targetOpeningTime
           .split(':')
           .map(Number);
         const openTotalMinutes = openHour * 60 + openMinute;
         const nowTotalMinutes = ist.hours * 60 + ist.minutes;
 
         // Use company-configured buffer (default 60 min before opening)
-        const earlyBuffer = employeeRecord.company.earlyCheckInBuffer ?? 60;
+        const earlyBuffer = employeeRecord.company?.earlyCheckInBuffer ?? 60;
         const earliestMinutes = openTotalMinutes - earlyBuffer;
         const earliestHour = Math.floor(earliestMinutes / 60);
         const earliestMin = earliestMinutes % 60;
@@ -161,12 +191,12 @@ export class AttendanceService {
         if (nowTotalMinutes < earliestMinutes) {
           const earliestStr = `${earliestHour.toString().padStart(2, '0')}:${earliestMin.toString().padStart(2, '0')}`;
           throw new ForbiddenException(
-            `Check-in is not allowed before ${earliestStr}. Please wait until then.`,
+            `Check-in is not allowed before ${earliestStr}. Please wait until then.`
           );
         }
 
         // Use company-configured cutoff (default 240 min = 4 hours after opening)
-        const cutoffMinutes = employeeRecord.company.checkInCutoffMinutes ?? 240;
+        const cutoffMinutes = employeeRecord.company?.checkInCutoffMinutes ?? 240;
         if (cutoffMinutes > 0 && nowTotalMinutes > openTotalMinutes + cutoffMinutes) {
           const cutoffHour = Math.floor((openTotalMinutes + cutoffMinutes) / 60);
           const cutoffMin = (openTotalMinutes + cutoffMinutes) % 60;
@@ -214,13 +244,14 @@ export class AttendanceService {
       onApprovedWFH = await this.wfhRequestsService.isEmployeeOnWFH(resolvedEmployee.id, today);
 
       const targetTime =
+        resolvedEmployee.startTime ||
         resolvedEmployee.checkInTime ||
         resolvedEmployee.company?.openingTime ||
         '10:00';
 
       if (targetTime) {
         const [targetHour, targetMinute] = targetTime.split(':').map(Number);
-        const lateThreshold = resolvedEmployee.company?.lateThresholdMinutes ?? 0;
+        const lateThreshold = 15;
         const targetTotalMinutes = targetHour * 60 + targetMinute + lateThreshold;
         const checkInTotalMinutes = ist.hours * 60 + ist.minutes;
 
@@ -230,7 +261,7 @@ export class AttendanceService {
           this.notificationsService.send({
             title: 'Late Check-in',
             message: `You checked in late at ${checkInTime}. Scheduled time: ${targetTime}.`,
-            type: 'both',
+            type: 'push',
             recipientFilter: 'custom',
             recipientIds: [resolvedEmployee.userId],
             companyId: resolvedEmployee.companyId,
@@ -241,7 +272,7 @@ export class AttendanceService {
           this.notificationsService.send({
             title: 'Early Check-in',
             message: `You checked in early at ${checkInTime}. Scheduled time: ${targetTime}.`,
-            type: 'both',
+            type: 'push',
             recipientFilter: 'custom',
             recipientIds: [resolvedEmployee.userId],
             companyId: resolvedEmployee.companyId,
@@ -279,27 +310,52 @@ export class AttendanceService {
           companyLogo: company?.logo || '',
           companyAddress: [company?.address, company?.city, company?.country].filter(Boolean).join(', '),
           companyEmail: company?.email || '',
+          companyId: company?.id,
         };
 
-        // Always send standard check-in confirmation
-        this.mailService.sendCheckInEmail(employee.user.email, {
-          employeeName: empName,
-          time: saved.checkInTime,
-          status: saved.status,
-          date: today,
-          ...companyCtx,
-        }).catch(err => console.error('[AttendanceService] Check-in email failed:', err));
+        // Send standard check-in confirmation if NOT late
+        if (!isLate) {
+          this.mailService.sendCheckInEmail(employee.user.email, {
+            employeeName: empName,
+            time: saved.checkInTime,
+            status: saved.status,
+            date: today,
+            ...companyCtx,
+          }).catch(err => console.error('[AttendanceService] Check-in email failed:', err));
+        }
 
         // Send late warning email if applicable
         if (isLate && (company?.enableLateEmailAlert !== false)) {
           this.mailService.sendLateWarningEmail(employee.user.email, {
             employeeName: empName,
             checkInTime: saved.checkInTime,
-            scheduledTime: employee.checkInTime || company?.openingTime || '',
+            scheduledTime: employee.startTime || employee.checkInTime || company?.openingTime || '',
             date: today,
             ...companyCtx,
           }).catch(err => console.error('[AttendanceService] Late warning email failed:', err));
         }
+
+        // Notify Admins of Check-in
+        this.getAdminEmails(employee).then(admins => {
+          admins.forEach(adminEmail => {
+            const scheduledTimeStr = employee.startTime || employee.checkInTime || company?.openingTime || '';
+            const statusLabel = saved.status === 'late' ? 'Arrived Late' : 'Checked In';
+            const bannerClass = saved.status === 'late' ? 'late' : '';
+            this.mailService.sendAdminAttendanceAlert(adminEmail, {
+              alertTitle: `Employee ${statusLabel}`,
+              bannerClass,
+              introText: `${empName} has registered a check-in at ${saved.checkInTime} on ${today}.`,
+              employeeName: empName,
+              date: today,
+              timeLabel: 'Check-In Time',
+              timeValue: saved.checkInTime,
+              scheduledTime: scheduledTimeStr,
+              status: saved.status,
+              isLate: saved.status === 'late',
+              ...companyCtx,
+            }).catch(err => console.error(`[AttendanceService] Admin check-in email alert failed for ${adminEmail}:`, err));
+          });
+        }).catch(err => console.error('[AttendanceService] Admin lookup failed for check-in notification:', err));
       }
 
       return saved;
@@ -384,10 +440,16 @@ export class AttendanceService {
     attendance.checkOutTime = checkOutTime;
 
     // Early departure logic
-    const endHour = 17;
-    if (ist.hours < endHour) {
-      if (attendance.status === 'present') {
-        attendance.status = 'early_departure';
+    const targetEndTime = employee?.endTime || '17:00';
+    if (targetEndTime) {
+      const [endHour, endMinute] = targetEndTime.split(':').map(Number);
+      const endTotalMinutes = endHour * 60 + (endMinute || 0);
+      const nowTotalMinutes = ist.hours * 60 + ist.minutes;
+
+      if (nowTotalMinutes < endTotalMinutes) {
+        if (attendance.status === 'present') {
+          attendance.status = 'early_departure';
+        }
       }
     }
 
@@ -400,17 +462,44 @@ export class AttendanceService {
     // Trigger Email Notification
     if (employee?.user?.email) {
       const co = employee.company;
-      this.mailService.sendCheckOutEmail(employee.user.email, {
-        employeeName: `${employee.user.firstName} ${employee.user.lastName}`,
-        time: saved.checkOutTime,
-        date: saved.date as any,
-        workHours: saved.workHours || 0,
-        overtime: saved.overtime || 0,
+      const empName = `${employee.user.firstName} ${employee.user.lastName}`;
+      const companyCtx = {
         companyName: co?.name || 'Your Company',
         companyLogo: co?.logo || '',
         companyAddress: [co?.address, co?.city, co?.country].filter(Boolean).join(', '),
         companyEmail: co?.email || '',
+        companyId: co?.id,
+      };
+
+      this.mailService.sendCheckOutEmail(employee.user.email, {
+        employeeName: empName,
+        time: saved.checkOutTime,
+        date: saved.date as any,
+        workHours: saved.workHours || 0,
+        overtime: saved.overtime || 0,
+        ...companyCtx,
       }).catch(err => console.error('[AttendanceService] Check-out email failed:', err));
+
+      // Notify Admins of Check-out
+      this.getAdminEmails(employee).then(admins => {
+        admins.forEach(adminEmail => {
+          this.mailService.sendAdminAttendanceAlert(adminEmail, {
+            alertTitle: 'Employee Checked Out',
+            bannerClass: 'checkout',
+            introText: `${empName} has checked out at ${saved.checkOutTime} on ${saved.date}. Daily total: ${saved.workHours || 0} hours worked.`,
+            employeeName: empName,
+            date: saved.date as any,
+            timeLabel: 'Check-Out Time',
+            timeValue: saved.checkOutTime,
+            status: saved.status,
+            isLate: false,
+            showStats: true,
+            workHours: saved.workHours || 0,
+            overtime: saved.overtime || 0,
+            ...companyCtx,
+          }).catch(err => console.error(`[AttendanceService] Admin check-out email alert failed for ${adminEmail}:`, err));
+        });
+      }).catch(err => console.error('[AttendanceService] Admin lookup failed for check-out notification:', err));
     }
 
     return saved;

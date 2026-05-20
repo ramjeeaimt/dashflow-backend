@@ -53,6 +53,8 @@ import { JobsModule } from './modules/jobs/jobs.module';
 import { Job } from './modules/jobs/entities/job.entity';
 import { Application } from './modules/jobs/entities/application.entity';
 import { JobMessage } from './modules/jobs/entities/message.entity';
+import { EmailTemplate } from './modules/email-templates/email-template.entity';
+import { EmailTemplatesModule } from './modules/email-templates/email-templates.module';
 
 @Module({
   imports: [
@@ -112,6 +114,7 @@ import { JobMessage } from './modules/jobs/entities/message.entity';
           Application,
           JobMessage,
           WFHRequest,
+          EmailTemplate,
         ];
         if (dbUrl) {
           return {
@@ -172,6 +175,7 @@ import { JobMessage } from './modules/jobs/entities/message.entity';
     DashboardModule,
     JobsModule,
     WFHRequestsModule,
+    EmailTemplatesModule,
   ],
 
   controllers: [AppController],

@@ -14,7 +14,7 @@ export class WFHRequestsService {
     @InjectRepository(Employee)
     private employeeRepository: Repository<Employee>,
     private readonly notificationsService: NotificationsService,
-  ) {}
+  ) { }
 
   async create(dto: CreateWFHRequestDto): Promise<WFHRequest> {
     const employee = await this.employeeRepository.findOne({

@@ -12,11 +12,6 @@
     .header img.logo { height: 44px; width: auto; border-radius: 6px; }
     .header-text h1 { color: #ffffff; font-size: 18px; font-weight: 700; letter-spacing: -0.3px; }
     .header-text p { color: rgba(255,255,255,0.7); font-size: 12px; margin-top: 2px; }
-    /* Warning banner */
-    .late-banner { background: #fef2f2; border-left: 4px solid #dc2626; padding: 14px 24px; display: flex; align-items: flex-start; gap: 12px; }
-    .late-banner .icon { font-size: 20px; flex-shrink: 0; margin-top: 1px; }
-    .late-banner .text strong { display: block; font-size: 14px; font-weight: 700; color: #991b1b; }
-    .late-banner .text span { font-size: 13px; color: #b91c1c; }
     /* Body */
     .body { padding: 32px; }
     .greeting { font-size: 15px; color: #1e293b; margin-bottom: 20px; }
@@ -27,10 +22,9 @@
     .info-label { width: 130px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #94a3b8; flex-shrink: 0; }
     .info-value { font-size: 14px; font-weight: 600; color: #0f172a; }
     .badge { display: inline-block; padding: 3px 12px; border-radius: 20px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
-    .badge-late { background: #fee2e2; color: #991b1b; }
-    .badge-present { background: #dcfce7; color: #166534; }
-    .badge-early { background: #dbeafe; color: #1d4ed8; }
-    .badge-wfh { background: #f3e8ff; color: #7e22ce; }
+    .badge-requested { background: #fef08a; color: #854d0e; }
+    .badge-approved { background: #dcfce7; color: #166534; }
+    .badge-rejected { background: #fee2e2; color: #991b1b; }
     .message { font-size: 14px; color: #64748b; line-height: 1.7; margin-top: 24px; padding: 16px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0; }
     /* Footer */
     .footer { background: #0f172a; padding: 24px 32px; }
@@ -49,53 +43,37 @@
       {{/if}}
       <div class="header-text">
         <h1>{{companyName}}</h1>
-        <p>Attendance Management System</p>
+        <p>Leave Management System</p>
       </div>
     </div>
-
-    <!-- Late Warning Banner -->
-    {{#if isLate}}
-    <div class="late-banner">
-      <span class="icon">⚠️</span>
-      <div class="text">
-        <strong>Late Check-in Recorded</strong>
-        <span>Your check-in has been marked as late. Please note this in your attendance record.</span>
-      </div>
-    </div>
-    {{/if}}
 
     <!-- Body -->
     <div class="body">
       <p class="greeting">Hello, <strong>{{name}}</strong></p>
-      <p style="font-size:14px;color:#475569;">Your attendance has been recorded for <strong>{{date}}</strong>.</p>
+      <p style="font-size:14px;color:#475569;">Your leave application status has been updated.</p>
 
       <div class="info-card">
         <div class="info-row">
-          <span class="info-label">Date</span>
-          <span class="info-value">{{date}}</span>
-        </div>
-        <div class="info-row">
-          <span class="info-label">Check-In Time</span>
-          <span class="info-value">{{time}}</span>
-        </div>
-        <div class="info-row">
           <span class="info-label">Status</span>
           <span class="info-value">
-            {{#if isLate}}<span class="badge badge-late">Late</span>{{/if}}
-            {{#if isPresent}}<span class="badge badge-present">Present</span>{{/if}}
-            {{#if isEarly}}<span class="badge badge-early">Early Check-in</span>{{/if}}
-            {{#if isWfh}}<span class="badge badge-wfh">Work From Home</span>{{/if}}
+            {{#if isRequested}}<span class="badge badge-requested">Requested</span>{{/if}}
+            {{#if isApproved}}<span class="badge badge-approved">Approved</span>{{/if}}
+            {{#if isRejected}}<span class="badge badge-rejected">Rejected</span>{{/if}}
           </span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Start Date</span>
+          <span class="info-value">{{startDate}}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">End Date</span>
+          <span class="info-value">{{endDate}}</span>
         </div>
       </div>
 
-      {{#if isLate}}
-      <div class="message" style="border-color:#fecaca;background:#fef9f9;">
-        ⚠️ <strong>Attendance Notice:</strong> Your check-in was recorded after your scheduled start time. Repeated late arrivals may impact your performance review and payroll deductions. Please ensure timely attendance going forward.
-      </div>
-      {{else}}
+      {{#if comment}}
       <div class="message">
-        ✅ Great start! Your check-in has been successfully recorded. Have a productive day!
+        <strong>Admin Note:</strong> {{comment}}
       </div>
       {{/if}}
     </div>

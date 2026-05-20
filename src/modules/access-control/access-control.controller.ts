@@ -8,6 +8,7 @@ import {
   Param,
   Query,
   UseGuards,
+  Request,
 } from '@nestjs/common';
 import { AccessControlService } from './access-control.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -18,8 +19,11 @@ export class AccessControlController {
   constructor(private readonly accessControlService: AccessControlService) { }
 
   @Get('roles')
-  async findAllRoles(@Query('companyId') companyId: string) {
-    return this.accessControlService.findAllRoles(companyId);
+  async findAllRoles(@Query('companyId') companyId: string, @Request() req: any) {
+    const user = req.user;
+    const isSuperAdmin = ['admin@difmo.com', 'info@difmo.com', 'hello@system.com'].includes(user.email);
+    const finalCompanyId = (!isSuperAdmin && user.company?.id) ? user.company.id : companyId;
+    return this.accessControlService.findAllRoles(finalCompanyId);
   }
 
   @Get('roles/:id')

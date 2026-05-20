@@ -71,6 +71,9 @@ export class Payroll {
   @Column({ default: 'pending' })
   status: string;
 
+  @Column({ type: 'text', nullable: true })
+  notes: string;
+
   @CreateDateColumn()
   createdAt: Date;
 

@@ -4,10 +4,20 @@ import { HandlebarsAdapter } from '@nestjs-modules/mailer/adapters/handlebars.ad
 import { ConfigService } from '@nestjs/config';
 import { join } from 'path';
 import { MailService } from './mail.service';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { Company } from '../companies/company.entity';
+import { EmailTemplate } from '../email-templates/email-template.entity';
+import * as handlebars from 'handlebars';
+
+// Register the eq helper globally so it works for all Handlebars templates
+handlebars.registerHelper('eq', function (v1, v2) {
+  return v1 === v2;
+});
 
 @Global()
 @Module({
   imports: [
+    TypeOrmModule.forFeature([Company, EmailTemplate]),
     MailerModule.forRootAsync({
       useFactory: (config: ConfigService) => ({
         transport: {

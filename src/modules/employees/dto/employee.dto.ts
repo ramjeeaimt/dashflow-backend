@@ -184,5 +184,13 @@ export class UpdateEmployeeDto {
   @IsString()
   @IsOptional()
   endTime?: string;
+
+  @IsArray()
+  @IsOptional()
+  roleIds?: string[];
+
+  @IsArray()
+  @IsOptional()
+  permissionIds?: string[];
 }
 

@@ -49,13 +49,17 @@ export class FinanceController {
     @Query('year') year?: number,
     @Request() req?: any
   ) {
+    const user = req.user;
+    const isSuperAdmin = ['admin@difmo.com', 'info@difmo.com', 'hello@system.com'].includes(user.email);
+    const finalCompanyId = (!isSuperAdmin && user.company?.id) ? user.company.id : companyId;
+
     // LOGIC: Agar na employeeId hai na companyId, toh logged-in user (Employee) ka data dikhao
-    if (!employeeId && !companyId) {
+    if (!employeeId && !finalCompanyId) {
       employeeId = req.user.employeeId || req.user.id;
     }
 
     // Ab service ko 4 arguments bhejo
-    return this.financeService.findAllPayroll(employeeId, month, year, companyId);
+    return this.financeService.findAllPayroll(employeeId, month, year, finalCompanyId);
   }
 
 
@@ -70,8 +74,12 @@ export class FinanceController {
   findAllExpenses(
     @Query('companyId') companyId: string,
     @Query('currency') currency?: string,
+    @Request() req?: any
   ) {
-    return this.financeService.findAllExpenses(companyId, currency);
+    const user = req.user;
+    const isSuperAdmin = ['admin@difmo.com', 'info@difmo.com', 'hello@system.com'].includes(user.email);
+    const finalCompanyId = (!isSuperAdmin && user.company?.id) ? user.company.id : companyId;
+    return this.financeService.findAllExpenses(finalCompanyId, currency);
   }
 
   @Delete('expenses/:id')
@@ -114,8 +122,12 @@ export class FinanceController {
     @Query('month') month?: number,
     @Query('year') year?: number,
     @Query('currency') currency?: string,
+    @Request() req?: any
   ) {
-    return this.financeService.getFinancialSummary(companyId, month, year, currency);
+    const user = req.user;
+    const isSuperAdmin = ['admin@difmo.com', 'info@difmo.com', 'hello@system.com'].includes(user.email);
+    const finalCompanyId = (!isSuperAdmin && user.company?.id) ? user.company.id : companyId;
+    return this.financeService.getFinancialSummary(finalCompanyId, month, year, currency);
   }
 
   @Patch('payroll/:id')
@@ -126,8 +138,11 @@ export class FinanceController {
 
   @Post('payroll/:id/send-email')
   @CheckAbilities({ action: Action.Update, subject: 'payroll' })
-  sendPayrollEmail(@Param('id') id: string) {
-    return this.financeService.sendPayrollEmail(id);
+  sendPayrollEmail(
+    @Param('id') id: string,
+    @Body() body?: { customHtml?: string; notes?: string }
+  ) {
+    return this.financeService.sendPayrollEmail(id, body?.customHtml, body?.notes);
   }
 
   @Delete('payroll/:id')

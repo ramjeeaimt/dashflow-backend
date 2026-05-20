@@ -5,7 +5,7 @@ import { Leave } from './leave.entity';
 import { CreateLeaveDto, UpdateLeaveStatusDto } from './dto/create-leave.dto';
 import { Employee } from '../employees/employee.entity';
 import { NotificationsService } from '../notifications/notifications.service';
-import { EmailService } from './email.service';
+import { MailService } from '../mail/mail.service';
 
 @Injectable()
 export class LeavesService {
@@ -16,7 +16,7 @@ export class LeavesService {
     @InjectRepository(Employee)
     private employeeRepository: Repository<Employee>,
     private readonly notificationsService: NotificationsService,
-    private readonly emailService: EmailService,
+    private readonly mailService: MailService,
   ) { }
 
   // ✅ CREATE LEAVE
@@ -29,7 +29,7 @@ export class LeavesService {
         { id: createLeaveDto.employeeId },
         { userId: createLeaveDto.employeeId }
       ],
-      relations: ['user'],
+      relations: ['user', 'company'],
     });
 
     if (!employee) {
@@ -85,6 +85,51 @@ export class LeavesService {
       console.error('[LeavesService] Failed to send admin notification:', err.message);
     }
 
+    // Send Leave Request email to configured admins and fallback company admins
+    try {
+      const adminEmails: string[] = [];
+      const companyId = employee.companyId;
+
+      if (employee.company?.attendanceAlertEmails) {
+        const configuredEmails = employee.company.attendanceAlertEmails
+          .split(',')
+          .map(email => email.trim())
+          .filter(Boolean);
+        adminEmails.push(...configuredEmails);
+      }
+
+      if (companyId) {
+        const allEmployees = await this.employeeRepository.find({
+          where: { companyId, isDeleted: false },
+          relations: ['user', 'user.roles'],
+        });
+        const companyAdmins = allEmployees
+          .filter(emp => emp.user?.email && emp.user?.roles?.some(role => ['admin', 'super admin', 'superadmin', 'manager'].includes(role.name.toLowerCase())))
+          .map(emp => emp.user.email);
+        adminEmails.push(...companyAdmins);
+      }
+
+      if (employee.company?.email) {
+        adminEmails.push(employee.company.email);
+      }
+
+      const uniqueAdmins = [...new Set(adminEmails)].filter(email => !!email);
+      const empName = `${employee.user?.firstName} ${employee.user?.lastName}`;
+      uniqueAdmins.forEach(adminEmail => {
+        // Send using MailService, which supports the global email template
+        this.mailService.sendLeaveStatusEmail(adminEmail, {
+          employeeName: empName,
+          status: 'REQUESTED',
+          startDate: createLeaveDto.startDate,
+          endDate: createLeaveDto.endDate,
+          comment: createLeaveDto.reason || 'Not specified',
+          companyId: employee.companyId,
+        }).catch(err => console.error(`[LeavesService] Failed to send leave alert to ${adminEmail}:`, err));
+      });
+    } catch (err) {
+      console.error('[LeavesService] Admin email alerting failed for leave request:', err);
+    }
+
     return savedLeave;
   }
 
@@ -99,6 +144,12 @@ export class LeavesService {
     if (filters?.employeeId) {
       query.andWhere('employee.userId = :userId', {
         userId: filters.employeeId,
+      });
+    }
+
+    if (filters?.companyId) {
+      query.andWhere('employee.companyId = :companyId', {
+        companyId: filters.companyId,
       });
     }
 
@@ -140,7 +191,7 @@ export class LeavesService {
     }
 
     const updatedLeave = await this.leavesRepository.save(leave);
-    
+
     // 1. Notification to Employee
     try {
       await this.notificationsService.send({
@@ -185,12 +236,13 @@ export class LeavesService {
     try {
       const empEmail = updatedLeave.employee?.user?.email;
       if (empEmail) {
-        const subject = `Leave ${updatedLeave.status}`;
-        const message = `Your leave application (${updatedLeave.id}) has been ${updatedLeave.status.toLowerCase()}. ${updatedLeave.adminComment ? 'Admin Note: ' + updatedLeave.adminComment : ''}`;
-        await this.emailService.sendLeaveStatusEmail(empEmail, subject, message, {
-          leaveId: updatedLeave.id,
+        await this.mailService.sendLeaveStatusEmail(empEmail, {
+          employeeName: updatedLeave.employee?.user?.firstName || 'Employee',
           status: updatedLeave.status,
+          startDate: updatedLeave.startDate,
+          endDate: updatedLeave.endDate,
           comment: updatedLeave.adminComment,
+          companyId: updatedLeave.employee?.companyId,
         });
       }
     } catch (emailErr) {
