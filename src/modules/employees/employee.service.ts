@@ -309,6 +309,9 @@ export class EmployeeService {
         'skills',
         'avatar',
         'documents',
+        'startTime',
+        'endTime',
+        'checkInTime',
       ];
 
       validFields.forEach((field) => {
@@ -323,7 +326,9 @@ export class EmployeeService {
         email ||
         phone ||
         password ||
-        updateEmployeeDto.avatar
+        updateEmployeeDto.avatar ||
+        roleIds !== undefined ||
+        permissionIds !== undefined
       ) {
         if (employee.userId) {
           const userUpdate: any = {};
@@ -341,6 +346,7 @@ export class EmployeeService {
             userUpdate,
           );
 
+          let isRolesChanged = false;
           if (roleIds) {
             // ENSURE "Employee" role is always assigned (Real-World RBAC Logic)
             const employeeRole = await this.userService.findRoleByName('Employee');
@@ -348,6 +354,12 @@ export class EmployeeService {
             if (employeeRole && !finalRoleIds.includes(employeeRole.id)) {
               finalRoleIds.push(employeeRole.id);
             }
+            const oldRoleIds = employee.user?.roles?.map(r => r.id) || [];
+            isRolesChanged = 
+              finalRoleIds.length !== oldRoleIds.length ||
+              !finalRoleIds.every(id => oldRoleIds.includes(id)) ||
+              !oldRoleIds.every(id => finalRoleIds.includes(id));
+
             user.roles = await this.userService.findRolesByIds(finalRoleIds);
           }
           if (permissionIds) {
@@ -359,7 +371,7 @@ export class EmployeeService {
             await this.userService.saveUser(user);
 
             // Trigger role-assignment notification if roles were changed
-            if (roleIds && user.email) {
+            if (roleIds && user.email && isRolesChanged) {
               const roleNames = user.roles.map(r => r.name);
               console.log(`[EmployeeService] Roles updated for ${user.email}. Sending notification...`);
               await this.mailService.sendRoleAssignmentNotification(user.email, {

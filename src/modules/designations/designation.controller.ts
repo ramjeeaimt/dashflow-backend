@@ -8,6 +8,7 @@ import {
   Delete,
   Query,
   UseGuards,
+  Request,
 } from '@nestjs/common';
 import { DesignationService } from './designation.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -28,8 +29,11 @@ export class DesignationController {
 
   @Get()
   @CheckAbilities({ action: Action.Read, subject: 'designation' })
-  findAll(@Query('companyId') companyId: string) {
-    return this.designationService.findAll(companyId);
+  findAll(@Query('companyId') companyId: string, @Request() req: any) {
+    const user = req.user;
+    const isSuperAdmin = ['admin@difmo.com', 'info@difmo.com', 'hello@system.com'].includes(user.email);
+    const finalCompanyId = (!isSuperAdmin && user.company?.id) ? user.company.id : companyId;
+    return this.designationService.findAll(finalCompanyId);
   }
 
   @Get(':id')

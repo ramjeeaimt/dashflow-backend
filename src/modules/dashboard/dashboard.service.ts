@@ -130,21 +130,80 @@ export class DashboardService {
   }
 
   async getFeedData(companyId: string, userId?: string) {
-    const auditLogs = await this.auditLogService.findAll();
-    const tasks = await this.projectsService.findAllTasksByCompany(companyId);
-    
+    // 1. Fetch live records from DB for company-specific activities
+    const [employees, allLeaves, tasks, auditLogs] = await Promise.all([
+      this.employeeService.findAll({ companyId }),
+      this.leavesService.findAll({}),
+      this.projectsService.findAllTasksByCompany(companyId),
+      this.auditLogService.findAll(),
+    ]);
+
+    // Filter leaves for this company
+    const companyLeaves = allLeaves.filter(l => l.employee?.companyId === companyId);
+
+    // Map Employees
+    const employeeActivities = employees.map(emp => {
+      let roleDisplay = emp.role || 'Employee';
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(roleDisplay);
+      if (isUuid) {
+        roleDisplay = 'Employee';
+      }
+      return {
+        id: `emp-${emp.id}`,
+        type: 'info',
+        message: `${emp.user?.firstName || 'New user'} ${emp.user?.lastName || ''} was added to the system as ${roleDisplay}`,
+        createdAt: new Date(emp.createdAt || emp.hireDate || new Date()),
+      };
+    });
+
+    // Map Leaves
+    const leaveActivities = companyLeaves.map(leave => ({
+      id: `leave-${leave.id}`,
+      type: 'leave',
+      message: `${leave.employee?.user?.firstName || 'Employee'} ${leave.employee?.user?.lastName || ''} requested a ${leave.type || 'Leave'} leave (${leave.status})`,
+      createdAt: new Date(leave.createdAt || new Date()),
+    }));
+
+    // Map Tasks
+    const taskActivities = tasks.map(task => ({
+      id: `task-${task.id}`,
+      type: 'task',
+      message: `Task "${task.title}" was ${task.status?.toLowerCase() === 'completed' ? 'completed' : 'created'}`,
+      createdAt: new Date(task.createdAt || new Date()),
+    }));
+
+    // Map Audit Logs
+    const auditActivities = auditLogs
+      .filter(log => log.user?.company?.id === companyId)
+      .map(log => ({
+        id: `audit-${log.id}`,
+        type: log.action.toLowerCase().includes('task') ? 'task' : 
+              log.action.toLowerCase().includes('leave') ? 'leave' : 'info',
+        message: `${log.user?.firstName || 'User'} ${log.user?.lastName || ''}: ${log.action}`,
+        createdAt: new Date(log.createdAt),
+      }));
+
+    // Merge and sort
+    const combined = [
+      ...employeeActivities,
+      ...leaveActivities,
+      ...taskActivities,
+      ...auditActivities,
+    ];
+
+    combined.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
+    const recentActivity = combined.slice(0, 10).map(act => ({
+      id: act.id,
+      type: act.type,
+      message: act.message,
+      time: this.getRelativeTime(act.createdAt),
+    }));
+
     // 💡 Personalization: For admins, show pending. For employees, show their approved ones.
     const pendingLeaves = userId 
         ? await this.leavesService.findAll({ employeeId: undefined, status: 'APPROVED' }) // need filter by userId/employeeId
         : await this.leavesService.findAll({ status: 'PENDING' });
-
-    const recentActivity = auditLogs.slice(0, 5).map(log => ({
-      id: log.id,
-      type: log.action.toLowerCase().includes('task') ? 'task' : 
-            log.action.toLowerCase().includes('leave') ? 'leave' : 'info',
-      message: `${log.user?.firstName || 'User'} ${log.user?.lastName || ''}: ${log.action}`,
-      time: this.getRelativeTime(new Date(log.createdAt)),
-    }));
 
     const upcomingEvents = tasks
       .filter((t: any) => {

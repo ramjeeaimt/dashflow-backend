@@ -6,7 +6,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 @Controller('wfh-requests')
 @UseGuards(JwtAuthGuard)
 export class WFHRequestsController {
-  constructor(private readonly wfhRequestsService: WFHRequestsService) {}
+  constructor(private readonly wfhRequestsService: WFHRequestsService) { }
 
   @Post()
   create(@Body() createDto: CreateWFHRequestDto) {

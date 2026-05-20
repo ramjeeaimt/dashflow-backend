@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f1f5f9; color: #334155; }
+    .wrapper { max-width: 600px; margin: 32px auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.08); }
+    /* Header */
+    .header { background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 24px 32px; display: flex; align-items: center; gap: 16px; }
+    .header img.logo { height: 44px; width: auto; border-radius: 6px; }
+    .header-text h1 { color: #ffffff; font-size: 18px; font-weight: 700; }
+    .header-text p { color: rgba(255,255,255,0.7); font-size: 12px; margin-top: 2px; }
+    /* Title banner */
+    .title-banner { background: #f8fafc; border-left: 4px solid #3b82f6; padding: 18px 32px; border-bottom: 1px solid #e2e8f0; }
+    .title-banner.late { border-left-color: #dc2626; background: #fef2f2; }
+    .title-banner.checkout { border-left-color: #10b981; background: #f0fdf4; }
+    .title-banner h2 { font-size: 16px; font-weight: 700; color: #1e293b; }
+    .title-banner.late h2 { color: #991b1b; }
+    .title-banner.checkout h2 { color: #065f46; }
+    /* Body */
+    .body { padding: 32px; }
+    .greeting { font-size: 15px; color: #1e293b; margin-bottom: 20px; }
+    .greeting strong { font-weight: 700; }
+    .info-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; margin-top: 20px; }
+    .info-row { display: flex; align-items: center; padding: 14px 20px; border-bottom: 1px solid #e2e8f0; }
+    .info-row:last-child { border-bottom: none; }
+    .info-label { width: 140px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #94a3b8; flex-shrink: 0; }
+    .info-value { font-size: 14px; font-weight: 600; color: #0f172a; }
+    .badge { display: inline-block; padding: 3px 12px; border-radius: 20px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+    .badge-late { background: #fee2e2; color: #991b1b; }
+    .badge-present { background: #dcfce7; color: #166534; }
+    .badge-early { background: #dbeafe; color: #1d4ed8; }
+    .badge-wfh { background: #f3e8ff; color: #7e22ce; }
+    
+    .stats-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 20px 0; }
+    .stat-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; text-align: center; }
+    .stat-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #94a3b8; margin-bottom: 6px; }
+    .stat-value { font-size: 24px; font-weight: 800; color: #0f172a; }
+    .stat-unit { font-size: 11px; color: #64748b; margin-left: 2px; }
+    .stat-card.highlight .stat-value { color: #2563eb; }
+    .stat-card.overtime .stat-value { color: #d97706; }
+
+    .message { font-size: 13px; color: #475569; line-height: 1.6; margin-top: 24px; padding: 16px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0; }
+    /* Footer */
+    .footer { background: #0f172a; padding: 24px 32px; }
+    .footer-company { font-size: 13px; font-weight: 700; color: #ffffff; margin-bottom: 4px; }
+    .footer-address { font-size: 11px; color: #94a3b8; line-height: 1.6; }
+    .footer-divider { border: none; border-top: 1px solid #1e293b; margin: 16px 0; }
+    .footer-copy { font-size: 11px; color: #475569; text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <!-- Header -->
+    <div class="header">
+      {{#if companyLogo}}
+        <img class="logo" src="{{companyLogo}}" alt="{{companyName}} logo" />
+      {{/if}}
+      <div class="header-text">
+        <h1>{{companyName}}</h1>
+        <p>Admin Attendance Alert System</p>
+      </div>
+    </div>
+
+    <!-- Title Banner -->
+    <div class="title-banner {{bannerClass}}">
+      <h2>{{alertTitle}}</h2>
+    </div>
+
+    <!-- Body -->
+    <div class="body">
+      <p class="greeting">Hello <strong>Administrator</strong>,</p>
+      <p style="font-size:14px; color:#475569; line-height: 1.6;">{{introText}}</p>
+
+      {{#if showStats}}
+      <!-- Stats -->
+      <div class="stats-row">
+        <div class="stat-card highlight">
+          <div class="stat-label">Hours Worked</div>
+          <div class="stat-value">{{workHours}}<span class="stat-unit">h</span></div>
+        </div>
+        <div class="stat-card overtime">
+          <div class="stat-label">Overtime</div>
+          <div class="stat-value">{{overtime}}<span class="stat-unit">h</span></div>
+        </div>
+      </div>
+      {{/if}}
+
+      <div class="info-card">
+        <div class="info-row">
+          <span class="info-label">Employee</span>
+          <span class="info-value">{{employeeName}}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Date</span>
+          <span class="info-value">{{date}}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">{{timeLabel}}</span>
+          <span class="info-value" {{#if isLate}}style="color:#dc2626;"{{/if}}>{{timeValue}}</span>
+        </div>
+        {{#if scheduledTime}}
+        <div class="info-row">
+          <span class="info-label">Scheduled Time</span>
+          <span class="info-value">{{scheduledTime}}</span>
+        </div>
+        {{/if}}
+        <div class="info-row">
+          <span class="info-label">Status</span>
+          <span class="info-value">
+            {{#if (eq status 'late')}}<span class="badge badge-late">Late</span>{{/if}}
+            {{#if (eq status 'present')}}<span class="badge badge-present">Present</span>{{/if}}
+            {{#if (eq status 'early_checkin')}}<span class="badge badge-early">Early Check-in</span>{{/if}}
+            {{#if (eq status 'wfh')}}<span class="badge badge-wfh">Work From Home</span>{{/if}}
+            {{#if (eq status 'early_departure')}}<span class="badge badge-late">Early Departure</span>{{/if}}
+          </span>
+        </div>
+      </div>
+
+      <div class="message">
+        ℹ️ <strong>System Record:</strong> This notification has been automatically dispatched to the admin dashboard email group upon employee action. No immediate action is required unless checking exceptions.
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+      {{#if companyAddress}}
+        <p class="footer-company">{{companyName}}</p>
+        <p class="footer-address">📍 {{companyAddress}}{{#if companyEmail}} &nbsp;|&nbsp; ✉️ {{companyEmail}}{{/if}}</p>
+      {{/if}}
+      <hr class="footer-divider" />
+      <p class="footer-copy">This is an automated system notification. &copy; {{companyName}}. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html>

@@ -53,8 +53,11 @@ export class NotificationsController {
     @Get('history')
     @UseGuards(AbilitiesGuard)
     @CheckAbilities({ action: Action.Read, subject: 'notification' })
-    getHistory(@Query('companyId') companyId: string) {
-        return this.notificationsService.getHistory(companyId);
+    getHistory(@Query('companyId') companyId: string, @Request() req: any) {
+        const user = req.user;
+        const isSuperAdmin = ['admin@difmo.com', 'info@difmo.com', 'hello@system.com'].includes(user.email);
+        const finalCompanyId = (!isSuperAdmin && user.company?.id) ? user.company.id : companyId;
+        return this.notificationsService.getHistory(finalCompanyId);
     }
 
     // ─── Direct User Notifications (SQL Fallback) ─────────────────────────────────
@@ -66,8 +69,11 @@ export class NotificationsController {
     @Get('stats')
     @UseGuards(AbilitiesGuard)
     @CheckAbilities({ action: Action.Read, subject: 'notification' })
-    getStats(@Query('companyId') companyId: string) {
-        return this.notificationsService.getStats(companyId);
+    getStats(@Query('companyId') companyId: string, @Request() req: any) {
+        const user = req.user;
+        const isSuperAdmin = ['admin@difmo.com', 'info@difmo.com', 'hello@system.com'].includes(user.email);
+        const finalCompanyId = (!isSuperAdmin && user.company?.id) ? user.company.id : companyId;
+        return this.notificationsService.getStats(finalCompanyId);
     }
 
     // ─── Interaction Logic ──────────────────────────────────────────────────────

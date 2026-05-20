@@ -8,6 +8,7 @@ import {
   Delete,
   Query,
   UseGuards,
+  Request,
 } from '@nestjs/common';
 import { ProjectsService } from './projects.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -29,8 +30,11 @@ export class ProjectsController {
 
   @Get('clients')
   @CheckAbilities({ action: Action.Read, subject: 'client' })
-  findAllClients(@Query('companyId') companyId: string) {
-    return this.projectsService.findAllClients(companyId);
+  findAllClients(@Query('companyId') companyId: string, @Request() req: any) {
+    const user = req.user;
+    const isSuperAdmin = ['admin@difmo.com', 'info@difmo.com', 'hello@system.com'].includes(user.email);
+    const finalCompanyId = (!isSuperAdmin && user.company?.id) ? user.company.id : companyId;
+    return this.projectsService.findAllClients(finalCompanyId);
   }
 
   // Projects
@@ -42,8 +46,11 @@ export class ProjectsController {
 
   @Get()
   @CheckAbilities({ action: Action.Read, subject: 'project' })
-  findAllProjects(@Query('companyId') companyId: string) {
-    return this.projectsService.findAllProjects(companyId);
+  findAllProjects(@Query('companyId') companyId: string, @Request() req: any) {
+    const user = req.user;
+    const isSuperAdmin = ['admin@difmo.com', 'info@difmo.com', 'hello@system.com'].includes(user.email);
+    const finalCompanyId = (!isSuperAdmin && user.company?.id) ? user.company.id : companyId;
+    return this.projectsService.findAllProjects(finalCompanyId);
   }
 
   // Tasks (MUST be before parameterized `:id` routes to avoid swallowing)
@@ -55,8 +62,11 @@ export class ProjectsController {
 
   @Get('tasks/company')
   @CheckAbilities({ action: Action.Read, subject: 'task' })
-  findAllTasksByCompany(@Query('companyId') companyId: string) {
-    return this.projectsService.findAllTasksByCompany(companyId);
+  findAllTasksByCompany(@Query('companyId') companyId: string, @Request() req: any) {
+    const user = req.user;
+    const isSuperAdmin = ['admin@difmo.com', 'info@difmo.com', 'hello@system.com'].includes(user.email);
+    const finalCompanyId = (!isSuperAdmin && user.company?.id) ? user.company.id : companyId;
+    return this.projectsService.findAllTasksByCompany(finalCompanyId);
   }
 
   @Get('tasks')

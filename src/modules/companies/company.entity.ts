@@ -96,6 +96,12 @@ export class Company {
   @Column({ default: true })
   enableLateEmailAlert: boolean; // send warning email on late check-in
 
+  @Column({ nullable: true })
+  attendanceAlertEmails: string; // comma-separated admin emails for attendance alerts
+
+  @Column({ nullable: true })
+  activeEmailTemplateId: string; // The selected global email template
+
   // ── Reward System ──────────────────────────────────────────────────
   @Column({ default: false })
   enableRewardSystem: boolean;

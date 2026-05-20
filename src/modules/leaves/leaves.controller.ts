@@ -8,6 +8,7 @@ import {
   Param,
   Query,
   UseGuards,
+  Request,
 } from '@nestjs/common';
 import { LeavesService } from './leaves.service';
 import { CreateLeaveDto, UpdateLeaveStatusDto } from './dto/create-leave.dto';
@@ -24,7 +25,12 @@ export class LeavesController {
   }
 
   @Get()
-  findAll(@Query() query: any) {
+  findAll(@Query() query: any, @Request() req: any) {
+    const user = req.user;
+    const isSuperAdmin = ['admin@difmo.com', 'info@difmo.com', 'hello@system.com'].includes(user.email);
+    if (!isSuperAdmin && user?.company?.id) {
+      query.companyId = user.company.id;
+    }
     return this.leavesService.findAll(query);
   }
 
