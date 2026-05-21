@@ -122,6 +122,7 @@ export class AttendanceService {
 
     // 2. Resolve true Employee Record (handling userId vs employeeId)
     let employeeRecord: Employee | null = null;
+    let isWithinOfficeRange = false;
     try {
       // First try as direct Employee ID
       employeeRecord = await this.employeeService.findOne(checkInDto.employeeId);
@@ -155,8 +156,7 @@ export class AttendanceService {
           (employeeRecord.employeeType === 'hybrid' && !employeeRecord.workFromHome)
         );
 
-      if (requiresGeofenceCheck && checkInDto.latitude && checkInDto.longitude) {
-
+      if (checkInDto.latitude && checkInDto.longitude) {
         const distance = this.calculateDistance(
           checkInDto.latitude,
           checkInDto.longitude,
@@ -164,7 +164,12 @@ export class AttendanceService {
           this.OFFICE_LNG,
         );
         console.log('[AttendanceService] Distance:', distance, 'MAX:', this.MAX_DISTANCE_METERS);
-        if (distance > this.MAX_DISTANCE_METERS) {
+        
+        if (distance <= this.MAX_DISTANCE_METERS) {
+          isWithinOfficeRange = true;
+        }
+
+        if (requiresGeofenceCheck && distance > this.MAX_DISTANCE_METERS) {
           throw new ForbiddenException(
             `You are ${Math.round(distance)}m away. You must be within ${this.MAX_DISTANCE_METERS}m of the office to check in.`,
           );
@@ -291,7 +296,7 @@ export class AttendanceService {
       date: today as any,
       checkInTime,
       status: finalStatus,
-      location: onApprovedWFH ? 'WFH' : (checkInDto.location || 'Office'),
+      location: onApprovedWFH ? 'WFH' : (isWithinOfficeRange ? 'Office' : (checkInDto.location || 'Office')),
       notes: checkInDto.notes,
     });
 
