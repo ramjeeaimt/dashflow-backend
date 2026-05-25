@@ -113,7 +113,7 @@ export class MailService {
   async sendLeaveStatusEmail(to: string, data: { employeeName: string; status: string; startDate: string; endDate: string; comment?: string; companyId?: string }) {
     const statusUpper = data.status.toUpperCase();
     const subject = `Leave Application ${statusUpper}`;
-    
+
     let color = '#f59e0b';
     let actionText = `A new leave request has been submitted by <strong>${data.employeeName}</strong> and requires your review.`;
     if (statusUpper === 'APPROVED') {
@@ -282,34 +282,83 @@ export class MailService {
     companyId?: string;
   }) {
     const subject = `🔔 Admin Alert: ${data.alertTitle} - ${data.employeeName}`;
-    
+
     let color = '#3b82f6'; // default blue
     if (data.isLate) color = '#ef4444';
     else if (data.status === 'present') color = '#10b981';
     else if (data.status === 'early_checkin') color = '#f59e0b';
     else if (data.status === 'wfh') color = '#8b5cf6';
 
-    const defaultMsgHtml = `
-      <div style="background: #f8fafc; border-left: 4px solid ${color}; padding: 24px; margin-bottom: 32px; border-radius: 4px;">
-        <h2 style="color: ${color}; font-size: 20px; font-weight: 800; margin: 0 0 12px 0;">${data.alertTitle}</h2>
-        <p style="margin: 0; color: #475569; font-size: 15px;">${data.introText}</p>
-        <div style="margin-top: 16px; font-size: 14px;">
-          <p style="margin: 4px 0;"><strong>Employee:</strong> ${data.employeeName}</p>
-          <p style="margin: 4px 0;"><strong>Date:</strong> ${data.date}</p>
-          <p style="margin: 4px 0;"><strong>${data.timeLabel}:</strong> ${data.timeValue}</p>
-          ${data.scheduledTime ? `<p style="margin: 4px 0;"><strong>Scheduled Time:</strong> ${data.scheduledTime}</p>` : ''}
-          <p style="margin: 4px 0;"><strong>Status:</strong> <span style="text-transform: uppercase; font-weight: bold; color: ${color};">${data.status}</span></p>
-          ${data.showStats ? `
-            <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e2e8f0;">
-              <p style="margin: 4px 0;"><strong>Total Work Hours:</strong> ${data.workHours ? data.workHours.toFixed(2) : '0.00'} hrs</p>
-              <p style="margin: 4px 0;"><strong>Overtime:</strong> ${data.overtime ? data.overtime.toFixed(2) : '0.00'} hrs</p>
-            </div>
-          ` : ''}
-        </div>
-      </div>
-    `;
+    // If this is a late arrival, use the dedicated late-warning template
+    if (data.isLate) {
+      await this.mailerService.sendMail({
+        to,
+        subject,
+        template: './late-warning',
+        context: {
+          name: data.employeeName,
+          checkInTime: data.timeValue,
+          scheduledTime: data.scheduledTime || '',
+          date: data.date,
+          companyName: data.companyName || 'Difmo CRM',
+          companyLogo: data.companyLogo || '',
+          companyAddress: data.companyAddress || '',
+          companyEmail: data.companyEmail || '',
+        },
+      });
+      return;
+    }
 
-    const customHtml = await this.getCustomHtml(data.companyId, data, defaultMsgHtml);
-    await this.mailerService.sendMail({ to, subject, html: customHtml });
+    // Send admin email – use admin-alert template only for late arrivals
+    if (data.isLate) {
+      await this.mailerService.sendMail({
+        to,
+        subject,
+        template: './admin-alert',
+        context: {
+          alertTitle: data.alertTitle,
+          bannerClass: data.bannerClass,
+          introText: data.introText,
+          employeeName: data.employeeName,
+          date: data.date,
+          timeLabel: data.timeLabel,
+          timeValue: data.timeValue,
+          scheduledTime: data.scheduledTime,
+          status: data.status,
+          isLate: data.isLate,
+          showStats: data.showStats,
+          workHours: data.workHours,
+          overtime: data.overtime,
+          companyName: data.companyName,
+          companyLogo: data.companyLogo,
+          companyAddress: data.companyAddress,
+          companyEmail: data.companyEmail,
+          companyId: data.companyId,
+        },
+      });
+    } else {
+      const defaultMsgHtml = `
+        <div style="background: #f8fafc; border-left: 4px solid ${color}; padding: 24px; margin-bottom: 32px; border-radius: 4px;">
+          <h2 style="color: ${color}; font-size: 20px; font-weight: 800; margin: 0 0 12px 0;">${data.alertTitle}</h2>
+          <p style="margin: 0; color: #475569; font-size: 15px;">${data.introText}</p>
+          <div style="margin-top: 16px; font-size: 14px;">
+            <p style="margin: 4px 0;"><strong>Employee:</strong> ${data.employeeName}</p>
+            <p style="margin: 4px 0;"><strong>Date:</strong> ${data.date}</p>
+            <p style="margin: 4px 0;"><strong>${data.timeLabel}:</strong> ${data.timeValue}</p>
+            ${data.scheduledTime ? `<p style="margin: 4px 0;"><strong>Scheduled Time:</strong> ${data.scheduledTime}</p>` : ''}
+            <p style="margin: 4px 0;"><strong>Status:</strong> <span style="text-transform: uppercase; font-weight: bold; color: ${color};">${data.status}</span></p>
+            ${data.showStats ? `
+              <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e2e8f0;">
+                <p style="margin: 4px 0;"><strong>Total Work Hours:</strong> ${data.workHours ? data.workHours.toFixed(2) : '0.00'} hrs</p>
+                <p style="margin: 4px 0;"><strong>Overtime:</strong> ${data.overtime ? data.overtime.toFixed(2) : '0.00'} hrs</p>
+              </div>
+            ` : ''}
+          </div>
+        </div>
+      `;
+      const customHtml = await this.getCustomHtml(data.companyId, data, defaultMsgHtml);
+      await this.mailerService.sendMail({ to, subject, html: customHtml });
+    }
+    return;
   }
 }

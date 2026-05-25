@@ -458,6 +458,11 @@ export class EmployeeService {
     return query.getCount();
   }
 
+  // Set employee status (active/terminated)
+  async setStatus(id: string, status: string) {
+    return this.employeeRepository.update(id, { status });
+  }
+
   async fixEmployeeRoles(companyId?: string) {
     console.log('[EmployeeService] Fixing employee roles...');
     const employees = await this.findAll({}); // Get all
