@@ -14,25 +14,18 @@ async function bootstrap() {
   app.useGlobalInterceptors(new TransformInterceptor());
   setupApp(app);
 
-  const port = process.env.PORT ?? 5002;
-  await app.listen(port, '0.0.0.0');
-
-  const networkInterfaces = os.networkInterfaces();
-  let networkIp = '';
-
-  Object.keys(networkInterfaces).forEach((interfaceName) => {
-    networkInterfaces[interfaceName]?.forEach((iface) => {
-      if (iface.family === 'IPv4' && !iface.internal) {
-        networkIp = iface.address;
-      }
-    });
-  });
-
-  console.log(`\n  \x1b[32m\x1b[1m➜\x1b[0m  \x1b[1mLocal:\x1b[0m   \x1b[36mhttp://localhost:${port}/api\x1b[0m`);
-  if (networkIp) {
-    console.log(`  \x1b[32m\x1b[1m➜\x1b[0m  \x1b[1mNetwork:\x1b[0m \x1b[36mhttp://${networkIp}:${port}/api\x1b[0m`);
+  const port = parseInt(process.env.PORT ?? '5002', 10);
+  try {
+    await app.listen(port);
+  } catch (err: any) {
+    if (err?.code === 'EADDRINUSE') {
+      const fallbackPort = port + 1;
+      console.warn(`Port ${port} in use, switching to ${fallbackPort}`);
+      await app.listen(fallbackPort);
+    } else {
+      throw err;
+    }
   }
-  console.log();
 }
 bootstrap();
 

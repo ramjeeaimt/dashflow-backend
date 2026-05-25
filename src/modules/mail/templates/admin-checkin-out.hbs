@@ -1,0 +1,13 @@
+<div style="background: #f8fafc; border-left: 4px solid {{color}}; padding: 24px; margin-bottom: 32px; border-radius: 4px;">
+  <h2 style="color: {{color}}; font-size: 20px; font-weight: 800; margin: 0 0 12px 0;">{{alertTitle}}</h2>
+  <p style="margin: 0; color: #475569; font-size: 15px;">{{introText}}</p>
+  <div style="margin-top: 16px; font-size: 14px;">
+    <p style="margin: 4px 0;"><strong>Employee:</strong> {{employeeName}}</p>
+    <p style="margin: 4px 0;"><strong>Date:</strong> {{date}}</p>
+    <p style="margin: 4px 0;"><strong>{{timeLabel}}:</strong> {{timeValue}}</p>
+    {{#if scheduledTime}}
+      <p style="margin: 4px 0;"><strong>Scheduled Time:</strong> {{scheduledTime}}</p>
+    {{/if}}
+    <p style="margin: 4px 0;"><strong>Status:</strong> <span style="text-transform: uppercase; font-weight: bold; color: {{color}};">{{status}}</span></p>
+  </div>
+</div>

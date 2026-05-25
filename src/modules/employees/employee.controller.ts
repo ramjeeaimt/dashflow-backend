@@ -1,4 +1,4 @@
-import {
+import { Patch,
   Controller,
   Get,
   Post,
@@ -138,6 +138,12 @@ export class EmployeeController {
         }
         : null,
     };
+  }
+
+  @Patch(':id/status')
+  @CheckAbilities({ action: Action.Update, subject: 'employee' })
+  async setStatus(@Param('id') id: string, @Body('status') status: string) {
+    return this.employeeService.setStatus(id, status);
   }
 
   @Delete(':id')
