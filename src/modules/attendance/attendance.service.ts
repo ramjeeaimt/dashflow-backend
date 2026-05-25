@@ -80,7 +80,7 @@ export class AttendanceService {
           .filter(Boolean);
         adminEmails.push(...configuredEmails);
       }
-      
+
       const companyId = employee?.companyId;
       if (companyId) {
         const allEmployees = await this.employeeService.findAll({ companyId });
@@ -164,7 +164,7 @@ export class AttendanceService {
           this.OFFICE_LNG,
         );
         console.log('[AttendanceService] Distance:', distance, 'MAX:', this.MAX_DISTANCE_METERS);
-        
+
         if (distance <= this.MAX_DISTANCE_METERS) {
           isWithinOfficeRange = true;
         }
@@ -343,7 +343,8 @@ export class AttendanceService {
         // Notify Admins of Check-in
         this.getAdminEmails(employee).then(admins => {
           admins.forEach(adminEmail => {
-            const scheduledTimeStr = employee.startTime || employee.checkInTime || company?.openingTime || '';
+            const scheduledTimeRaw = employee.startTime || employee.checkInTime || company?.openingTime || '';
+            const scheduledTimeStr = this.formatTo12Hour(scheduledTimeRaw);
             const statusLabel = saved.status === 'late' ? 'Arrived Late' : 'Checked In';
             const bannerClass = saved.status === 'late' ? 'late' : '';
             this.mailService.sendAdminAttendanceAlert(adminEmail, {
@@ -476,31 +477,31 @@ export class AttendanceService {
         companyId: co?.id,
       };
 
-      this.mailService.sendCheckOutEmail(employee.user.email, {
-        employeeName: empName,
-        time: saved.checkOutTime,
-        date: saved.date as any,
-        workHours: saved.workHours || 0,
-        overtime: saved.overtime || 0,
-        ...companyCtx,
-      }).catch(err => console.error('[AttendanceService] Check-out email failed:', err));
+        const formattedTime = this.formatTo12Hour(saved.checkOutTime);
+        this.mailService.sendCheckOutEmail(employee.user.email, {
+          employeeName: empName,
+          time: formattedTime,
+          date: saved.date as any,
+          workHours: saved.workHours || 0,
+          overtime: saved.overtime || 0,
+          ...companyCtx,
+        }).catch(err => console.error('[AttendanceService] Check-out email failed:', err));
 
       // Notify Admins of Check-out
       this.getAdminEmails(employee).then(admins => {
         admins.forEach(adminEmail => {
+          const formattedTime = this.formatTo12Hour(saved.checkOutTime);
           this.mailService.sendAdminAttendanceAlert(adminEmail, {
             alertTitle: 'Employee Checked Out',
             bannerClass: 'checkout',
-            introText: `${empName} has checked out at ${saved.checkOutTime} on ${saved.date}. Daily total: ${saved.workHours || 0} hours worked.`,
+            // Admin checkout email uses 12‑hour format
+            introText: `${empName} has checked out at ${formattedTime} on ${saved.date}. Daily total: ${saved.workHours || 0} hours worked.`,
             employeeName: empName,
             date: saved.date as any,
             timeLabel: 'Check-Out Time',
             timeValue: saved.checkOutTime,
             status: saved.status,
             isLate: false,
-            showStats: true,
-            workHours: saved.workHours || 0,
-            overtime: saved.overtime || 0,
             ...companyCtx,
           }).catch(err => console.error(`[AttendanceService] Admin check-out email alert failed for ${adminEmail}:`, err));
         });
@@ -797,4 +798,14 @@ export class AttendanceService {
 
     return { message: 'Attendance record revoked successfully. You can now check in again.' };
   }
+  private formatTo12Hour(time24: string): string {
+    if (!time24) return '';
+    const [hourStr, minute] = time24.split(':');
+    const hour = parseInt(hourStr, 10);
+    const hour12 = hour % 12 === 0 ? 12 : hour % 12;
+    const suffix = hour >= 12 ? 'PM' : 'AM';
+    return `${hour12}:${minute} ${suffix}`;
+  }
+
 }
+
