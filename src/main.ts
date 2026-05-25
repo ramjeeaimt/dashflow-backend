@@ -3,10 +3,12 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { setupApp } from './setup';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
+import { Logger } from '@nestjs/common';
 import * as dns from 'node:dns';
+import * as os from 'node:os';
 
 async function bootstrap() {
-
+  const logger = new Logger('Bootstrap');
   dns.setDefaultResultOrder('ipv4first');
   const app = await NestFactory.create(AppModule);
   app.useGlobalInterceptors(new TransformInterceptor());
@@ -26,3 +28,4 @@ async function bootstrap() {
   }
 }
 bootstrap();
+
