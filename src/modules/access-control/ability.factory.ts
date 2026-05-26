@@ -47,6 +47,7 @@ export class AbilityFactory {
       can(Action.Read, 'payroll' as any);
       // Allow regular employees to create attendance (check-in)
       can(Action.Create, 'attendance' as any, { employeeId: user.id } as any);
+      can(Action.Update, 'attendance' as any, { employeeId: user.id } as any);
     }
 
     if (user.roles) {

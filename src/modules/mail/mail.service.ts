@@ -13,7 +13,7 @@ export class MailService {
     private companyRepository: Repository<Company>,
     @InjectRepository(EmailTemplate)
     private emailTemplateRepository: Repository<EmailTemplate>,
-  ) {}
+  ) { }
 
   // Helper to convert 24‑hour time strings (e.g., "13:45") to 12‑hour format with AM/PM
   private formatTo12Hour(time24: string): string {
@@ -30,124 +30,23 @@ export class MailService {
     vars: any,
     defaultMsgHtml: string = '',
   ): Promise<string> {
-    try {
-      let tpl: any = {
-        signatureTeam: 'Team DIFMO',
-        signatureDept: 'Corporate Support',
-        signatureRole: 'Communications & Experience',
-        signatureCompany: 'DIFMO Pvt Ltd',
-        signatureMeetText: "Let's meet",
-        signatureMeetLink: 'https://www.difmo.com/contact',
-        signatureEmail: 'info@difmo.com',
-        signatureAddress: '4/37 Vibhav Khand, Gomtinagr Lucknow, Uttar Pradesh 226016, India',
-        signatureWebsite: 'difmo.com',
-        signatureWebsiteLink: 'https://www.difmo.com',
-      };
+    // ALWAYS use the provided default HTML; ignore any DB‑stored company template.
+    // This prevents salary‑slip or other unwanted templates from being sent on check‑in/out.
+    let msg = defaultMsgHtml;
 
-      let msg = defaultMsgHtml;
-
-      if (companyId) {
-        const company = await this.companyRepository.findOne({ where: { id: companyId } });
-        if (company?.activeEmailTemplateId) {
-          const dbTpl = await this.emailTemplateRepository.findOne({ where: { id: company.activeEmailTemplateId } });
-          if (dbTpl) {
-            tpl = dbTpl;
-            msg = dbTpl.message || '';
-          }
-        }
-      }
-
-      for (const key of Object.keys(vars)) {
-        const regex = new RegExp(`{{${key}}}`, 'g');
-        msg = msg.replace(regex, vars[key]);
-      }
-
-      const year = new Date().getFullYear();
-      const bannerUrl = 'https://res.cloudinary.com/dxju8ikk4/image/upload/v1777468072/difmo_banner_final.png';
-      const randomId = Math.random().toString(36).substring(2, 15);
-
-      return `
-        <div style="font-family: 'Segoe UI', Helvetica, Arial, sans-serif; background: #fff; color: #1e293b; margin: 0; padding: 20px; box-sizing: border-box; min-height: 100%;">
-          <div style="max-width: 700px; margin: 0 auto; background: #fff; box-sizing: border-box;">
-            <div style="font-size: 16px; line-height: 1.6; color: #334155;">
-              ${msg}
-            </div>
-            <div style="margin-top: 48px; padding-top: 28px; border-top: 1px solid #f1f5f9;">
-              <img src="https://res.cloudinary.com/dxju8ikk4/image/upload/v1777469595/difmo_vector_icon.png" width="100" height="100" style="border-radius: 50%; object-fit: cover; display: block; margin-bottom: 20px;" />
-              <div style="border-top: 1px solid #1e293b; padding-top: 22px; max-width: 650px;">
-                <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
-                  <tr>
-                    <td width="55%" valign="top">
-                      <p style="margin: 0 0 2px; font-size: 20px; font-weight: 800; color: #000; letter-spacing: -0.4px;">
-                        ${tpl.signatureTeam || 'Team DIFMO'}
-                      </p>
-                      <p style="margin: 0 0 1px; font-size: 15px; color: #1e293b; font-weight: 500;">
-                        ${tpl.signatureDept || 'Corporate Support'}
-                      </p>
-                      <p style="margin: 0 0 12px; font-size: 14px; color: #475569; font-style: italic;">
-                        ${tpl.signatureRole || 'Communications & Experience'}
-                      </p>
-                      <p style="margin: 0 0 14px; font-size: 15px; font-weight: 800; color: #000;">
-                        ${tpl.signatureCompany || 'DIFMO Pvt Ltd'}
-                      </p>
-                      <a href="${tpl.signatureMeetLink || '#'}" style="color: #d03f13ff; font-size: 14px; font-weight: 700; text-decoration: none;">
-                        ${tpl.signatureMeetText || "Let's meet"}
-                      </a>
-                    </td>
-                    <td width="45%" valign="top">
-                      <table role="presentation" border="0" cellpadding="0" cellspacing="0">
-                        <tr>
-                          <td width="32" valign="top" style="padding-bottom: 14px;">
-                            <div style="width: 24px; height: 24px; background: #000; border-radius: 50%; text-align: center; line-height: 24px;">
-                              <span style="color: #fff; font-size: 11px; font-weight: 800;">E</span>
-                            </div>
-                          </td>
-                          <td style="padding-bottom: 14px; font-size: 14px; font-weight: 600; color: #000; line-height: 1.5;">
-                            ${tpl.signatureEmail || ''}
-                          </td>
-                        </tr>
-                        <tr>
-                          <td width="32" valign="top" style="padding-bottom: 14px;">
-                            <div style="width: 24px; height: 24px; background: #000; border-radius: 50%; text-align: center; line-height: 24px;">
-                              <span style="color: #fff; font-size: 11px; font-weight: 800;">A</span>
-                            </div>
-                          </td>
-                          <td style="padding-bottom: 14px; font-size: 14px; font-weight: 600; color: #000; line-height: 1.5;">
-                            ${tpl.signatureAddress || ''}
-                          </td>
-                        </tr>
-                        <tr>
-                          <td width="32" valign="top" style="padding-bottom: 14px;">
-                            <div style="width: 24px; height: 24px; background: #000; border-radius: 50%; text-align: center; line-height: 24px;">
-                              <span style="color: #fff; font-size: 11px; font-weight: 800;">W</span>
-                            </div>
-                          </td>
-                          <td style="padding-bottom: 14px; font-size: 14px; font-weight: 600; color: #000; line-height: 1.5;">
-                            <a href="${tpl.signatureWebsiteLink || '#'}" style="color: #d03f13ff; text-decoration: none;">
-                              ${tpl.signatureWebsite || ''}
-                            </a>
-                          </td>
-                        </tr>
-                      </table>
-                    </td>
-                  </tr>
-                </table>
-              </div>
-            </div>
-            <div style="margin-top: 36px; border-radius: 10px; overflow: hidden; line-height: 0;">
-              <img src="${bannerUrl}" style="width: 100%; height: auto; display: block;" />
-            </div>
-            <div style="margin-top: 36px; font-size: 11px; color: #94a3b8; line-height: 1.5;">
-              <p>&copy; ${year} ${tpl.signatureCompany || 'DIFMO PRIVATE LIMITED'}. ALL RIGHTS RESERVED.</p>
-            </div>
-          </div>
-        </div>
-        <div style="display: none; opacity: 0; font-size: 0; max-height: 0; line-height: 0; mso-hide: all;">Ref: ${randomId}-${Date.now()}</div>
-      `;
-    } catch (err) {
-      console.error('[MailService] getCustomHtml error:', err);
-      return '';
+    // Simple Handlebars‑style interpolation for the supplied variables.
+    for (const key of Object.keys(vars)) {
+      const regex = new RegExp(`{{${key}}}`, 'g');
+      msg = msg.replace(regex, vars[key]);
     }
+
+    // Append a minimal footer (year + company name) if not already present.
+    const year = new Date().getFullYear();
+    const footer = `
+      <div style="margin-top:24px;font-size:12px;color:#64748b;">
+        © ${year} ${vars.companyName || 'Your Company'}. All rights reserved.
+      </div>`;
+    return msg + footer;
   }
 
   // Leave status email
@@ -397,10 +296,7 @@ export class MailService {
   }
 
   // Role Assignment Notification
-  async sendRoleAssignmentNotification(
-    to: string,
-    data: { employeeName: string; roles: string[] },
-  ) {
+  async sendRoleAssignmentNotification(to: string, data: { employeeName: string; roles: string[] }) {
     await this.mailerService.sendMail({
       to,
       subject: `Congratulations! Your New Role at DIFMO: ${data.roles.join(', ')}`,
@@ -411,5 +307,18 @@ export class MailService {
         year: new Date().getFullYear(),
       },
     });
+  }
+
+  // OTP email for password reset
+  async sendOtpEmail(to: string, data: { otp: string; companyId?: string }) {
+    const defaultMsgHtml = `
+      <div style="background:#f8fafc;padding:24px;border-left:4px solid #3b82f6;">
+        <h2 style="color:#3b82f6;font-size:20px;margin:0 0 12px;">Your One-Time Password (OTP)</h2>
+        <p style="margin:0;color:#475569;">Use the following OTP to reset your password. It expires in 5 minutes.</p>
+        <p style="font-size:24px;font-weight:bold;margin-top:12px;color:#2563eb;">${data.otp}</p>
+      </div>
+    `;
+    const customHtml = await this.getCustomHtml(data.companyId, {}, defaultMsgHtml);
+    await this.mailerService.sendMail({ to, subject: 'Password Reset OTP', html: customHtml });
   }
 }

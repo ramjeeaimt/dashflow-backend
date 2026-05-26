@@ -11,6 +11,7 @@ async function bootstrap() {
   const logger = new Logger('Bootstrap');
   dns.setDefaultResultOrder('ipv4first');
   const app = await NestFactory.create(AppModule);
+  app.setGlobalPrefix('api');
   app.useGlobalInterceptors(new TransformInterceptor());
   setupApp(app);
 

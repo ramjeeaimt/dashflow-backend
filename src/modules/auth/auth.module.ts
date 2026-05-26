@@ -11,11 +11,13 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AccessControlModule } from '../access-control/access-control.module';
 import { DesignationModule } from '../designations/designation.module';
 import { EmployeeModule } from '../employees/employee.module';
+import { ForgotPasswordModule } from './forgot-password/forgot-password.module';
 
 @Module({
   imports: [
     CompanyModule,
     UserModule,
+    ForgotPasswordModule,
     AccessControlModule,
     DesignationModule,
     EmployeeModule,
@@ -33,4 +35,4 @@ import { EmployeeModule } from '../employees/employee.module';
   controllers: [AuthController],
   exports: [AuthService],
 })
-export class AuthModule {}
+export class AuthModule { }

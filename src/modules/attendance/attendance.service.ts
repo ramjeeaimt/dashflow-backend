@@ -73,6 +73,7 @@ export class AttendanceService {
   private async getAdminEmails(employee: Employee): Promise<string[]> {
     const adminEmails: string[] = [];
     try {
+      // Only use the configured admin alert emails from the company settings
       if (employee?.company?.attendanceAlertEmails) {
         const configuredEmails = employee.company.attendanceAlertEmails
           .split(',')
@@ -80,21 +81,10 @@ export class AttendanceService {
           .filter(Boolean);
         adminEmails.push(...configuredEmails);
       }
-
-      const companyId = employee?.companyId;
-      if (companyId) {
-        const allEmployees = await this.employeeService.findAll({ companyId });
-        const companyAdmins = allEmployees
-          .filter(emp => emp.user?.email && emp.user?.roles?.some(role => ['admin', 'super admin', 'superadmin', 'manager'].includes(role.name.toLowerCase())))
-          .map(emp => emp.user.email);
-        adminEmails.push(...companyAdmins);
-      }
-      if (employee?.company?.email) {
-        adminEmails.push(employee.company.email);
-      }
     } catch (err) {
       console.error('[AttendanceService] Failed to resolve admin emails:', err);
     }
+    // Return unique, non-empty email list
     return [...new Set(adminEmails)].filter(email => !!email);
   }
 
@@ -477,35 +467,36 @@ export class AttendanceService {
         companyId: co?.id,
       };
 
-        const formattedTime = this.formatTo12Hour(saved.checkOutTime);
-        this.mailService.sendCheckOutEmail(employee.user.email, {
-          employeeName: empName,
-          time: formattedTime,
-          date: saved.date as any,
-          workHours: saved.workHours || 0,
-          overtime: saved.overtime || 0,
-          ...companyCtx,
-        }).catch(err => console.error('[AttendanceService] Check-out email failed:', err));
+      const formattedTime = this.formatTo12Hour(saved.checkOutTime);
+      this.mailService.sendCheckOutEmail(employee.user.email, {
+        employeeName: empName,
+        time: formattedTime,
+        date: saved.date as any,
+        workHours: saved.workHours || 0,
+        overtime: saved.overtime || 0,
+        ...companyCtx,
+      }).catch(err => console.error('[AttendanceService] Check-out email failed:', err));
 
       // Notify Admins of Check-out
-      this.getAdminEmails(employee).then(admins => {
-        admins.forEach(adminEmail => {
-          const formattedTime = this.formatTo12Hour(saved.checkOutTime);
-          this.mailService.sendAdminAttendanceAlert(adminEmail, {
-            alertTitle: 'Employee Checked Out',
-            bannerClass: 'checkout',
-            // Admin checkout email uses 12‑hour format
-            introText: `${empName} has checked out at ${formattedTime} on ${saved.date}. Daily total: ${saved.workHours || 0} hours worked.`,
-            employeeName: empName,
-            date: saved.date as any,
-            timeLabel: 'Check-Out Time',
-            timeValue: saved.checkOutTime,
-            status: saved.status,
-            isLate: false,
-            ...companyCtx,
-          }).catch(err => console.error(`[AttendanceService] Admin check-out email alert failed for ${adminEmail}:`, err));
-        });
-      }).catch(err => console.error('[AttendanceService] Admin lookup failed for check-out notification:', err));
+      this.getAdminEmails(employee)
+        .then(admins => {
+          admins.forEach(adminEmail => {
+            const formattedTime = this.formatTo12Hour(saved.checkOutTime);
+            this.mailService.sendAdminAttendanceAlert(adminEmail, {
+              alertTitle: 'Employee Checked Out',
+              bannerClass: 'checkout',
+              introText: `${empName} has checked out at ${formattedTime} on ${saved.date}. Daily total: ${saved.workHours || 0} hours worked.`,
+              employeeName: empName,
+              date: saved.date as any,
+              timeLabel: 'Check-Out Time',
+              timeValue: saved.checkOutTime,
+              status: saved.status,
+              isLate: false,
+              ...companyCtx,
+            }).catch(err => console.error(`[AttendanceService] Admin check-out email alert failed for ${adminEmail}:`, err));
+          });
+        })
+        .catch(err => console.error('[AttendanceService] Admin lookup failed for check-out notification:', err));
     }
 
     return saved;
@@ -722,6 +713,7 @@ export class AttendanceService {
     if (data.checkOutTime) attendance.checkOutTime = data.checkOutTime;
     if (data.status) attendance.status = data.status;
 
+    // Handle notes (optional)
     if (data.notes) {
       const now = new Date();
       const options: Intl.DateTimeFormatOptions = {
@@ -731,16 +723,16 @@ export class AttendanceService {
         hour: '2-digit',
         minute: '2-digit',
         hour12: true,
-        timeZone: 'Asia/Kolkata'
+        timeZone: 'Asia/Kolkata',
       };
       const timestamp = new Intl.DateTimeFormat('en-IN', options).format(now);
-
       const changeSummary = changes.length > 0 ? ` [${changes.join(', ')}]` : '';
       const editNote = `[Edited on ${timestamp}]${changeSummary}: ${data.notes}`;
-
       attendance.notes = attendance.notes ? `${attendance.notes} | ${editNote}` : editNote;
-    } else if (data.checkInTime || data.checkOutTime) {
-      // If times are being changed, enforce a note
+    }
+
+    // Enforce note for check‑in changes
+    if (data.checkInTime && !data.notes) {
       throw new BadRequestException('A note explaining the reason for change is required.');
     }
 

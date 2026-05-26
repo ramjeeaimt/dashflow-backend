@@ -160,7 +160,8 @@ export class EmployeeService {
       .leftJoinAndSelect('roles.permissions', 'rolePermissions')
       .leftJoinAndSelect('employee.company', 'company')
       .leftJoinAndSelect('employee.department', 'department')
-      .leftJoinAndSelect('employee.designation', 'designation');
+      .leftJoinAndSelect('employee.designation', 'designation')
+      .leftJoinAndSelect('employee.leaves', 'leaves', "leaves.status = 'APPROVED' AND leaves.startDate <= :today AND leaves.endDate >= :today", { today: new Date(new Date().getTime() + (5.5 * 60 * 60 * 1000)).toISOString().split('T')[0] });
 
     if (filters?.companyId) {
       console.log(

@@ -92,6 +92,18 @@ export class AuthService {
     return this.login({ ...user, loginRole: 'employee' });
   }
 
+  // Change own password (admin or any logged-in user)
+  async changeOwnPassword(userId: string, newPassword: string) {
+    const user = await this.userService.findById(userId);
+    if (!user) {
+      throw new Error('User not found');
+    }
+    const hashed = await bcrypt.hash(newPassword, 10);
+    user.password = hashed;
+    await this.userService.saveUser(user);
+    return { message: 'Password updated successfully' };
+  }
+
   private flattenPermissions(user: any) {
     const permissions = new Set<string>();
     const result: any[] = [];
