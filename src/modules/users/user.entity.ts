@@ -39,6 +39,12 @@ export class User {
   @Column({ default: true })
   isActive: boolean;
 
+  @Column({ nullable: true })
+  resetPasswordOtp: string;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  resetPasswordOtpExpires: Date;
+
   @ManyToOne(() => Company, (company) => company.users)
   company: Company;
 

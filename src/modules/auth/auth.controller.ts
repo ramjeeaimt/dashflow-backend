@@ -8,6 +8,7 @@ import {
   Request,
   UnauthorizedException,
 } from '@nestjs/common';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { UserService } from '../users/user.service';
@@ -98,5 +99,12 @@ export class AuthController {
   async updateProfile(@Request() req, @Body() body: any) {
     // req.user is the full User entity from JwtStrategy
     return this.userService.updateProfile(req.user.id, body);
+  }
+
+  // Change own password (admin or any logged-in user)
+  @UseGuards(JwtAuthGuard)
+  @Patch('change-password')
+  async changePassword(@Request() req, @Body() dto: ChangePasswordDto) {
+    return this.authService.changeOwnPassword(req.user.id, dto.newPassword);
   }
 }
