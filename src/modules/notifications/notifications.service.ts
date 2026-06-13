@@ -14,6 +14,7 @@ import { User } from '../users/user.entity';
 import { Client } from '../clients/client.entity';
 import { ConfigService } from '@nestjs/config';
 import * as admin from 'firebase-admin';
+import { firestore, messaging } from '../../config/firebase.config';
 import { NotificationsGateway } from './notifications.gateway';
 import { getEmailLayout } from './email-templates/email-layout.template';
 import { getSpecializedContent } from './email-templates/email-content.template';
@@ -36,7 +37,7 @@ export interface SendNotificationDto {
 @Injectable()
 export class NotificationsService implements OnModuleInit {
     private readonly logger = new Logger(NotificationsService.name);
-    private firestore: admin.firestore.Firestore;
+    private firestore = firestore;
 
     constructor(
         @InjectRepository(Notification)
@@ -55,21 +56,8 @@ export class NotificationsService implements OnModuleInit {
     ) { }
 
     onModuleInit() {
-        this.initializeFirebase();
-    }
-
-    private initializeFirebase() {
-        try {
-            if (!admin.apps.length) {
-                admin.initializeApp({
-                    projectId: this.configService.get('FIREBASE_PROJECT_ID'),
-                });
-                this.logger.log('Firebase Admin initialized successfully');
-            }
-            this.firestore = admin.firestore();
-        } catch (error) {
-            this.logger.error('Failed to initialize Firebase Admin:', error.message);
-        }
+        // Firebase is now globally initialized in src/config/firebase.config.ts
+        this.logger.log('NotificationsService initialized');
     }
 
     // ─── FCM Token Management ────────────────────────────────────────────────────
@@ -133,6 +121,47 @@ export class NotificationsService implements OnModuleInit {
             this.logger.debug(`[FirestoreSync] Targeted User IDs: ${userIds.join(', ')}`);
         } catch (error) {
             this.logger.error(`[FirestoreSync] CRITICAL: Failed to commit Firestore batch: ${error.message}`);
+        }
+    }
+
+    // ─── FCM Push Notifications ──────────────────────────────────────────────────
+
+    private async sendPushNotifications(userIds: string[], title: string, message: string, metadata: any = {}) {
+        const tokens: string[] = [];
+        for (const userId of userIds) {
+            const userTokens = await this.getUserFcmTokens(userId);
+            tokens.push(...userTokens.map(t => t.token));
+        }
+
+        if (tokens.length === 0) {
+            this.logger.debug('No FCM tokens found for the targeted users. Skipping push notification.');
+            return;
+        }
+
+        // FCM Data payload only supports string values
+        const cleanMetadata: any = {};
+        if (metadata) {
+            Object.keys(metadata).forEach(key => {
+                if (metadata[key] !== undefined && metadata[key] !== null) {
+                    cleanMetadata[key] = typeof metadata[key] === 'object' 
+                        ? JSON.stringify(metadata[key]) 
+                        : String(metadata[key]);
+                }
+            });
+        }
+
+        try {
+            const response = await messaging.sendEachForMulticast({
+                tokens,
+                notification: {
+                    title,
+                    body: message,
+                },
+                data: cleanMetadata,
+            });
+            this.logger.log(`[FCM] Successfully sent push notifications. Success: ${response.successCount}, Failure: ${response.failureCount}`);
+        } catch (error) {
+            this.logger.error(`[FCM] Failed to send push notifications: ${error.message}`);
         }
     }
 
@@ -315,6 +344,11 @@ export class NotificationsService implements OnModuleInit {
                 ...dto.metadata
             });
         });
+
+        // 5. Send FCM Push Notification
+        if (dto.type === 'push' || dto.type === 'both' || dto.type === 'realtime') {
+            await this.sendPushNotifications(userIds, dto.title, dto.message, dto.metadata);
+        }
 
         return notification;
     }

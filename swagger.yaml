@@ -55,6 +55,19 @@ paths:
       responses:
         "200":
           description: ""
+  /api/auth/change-password:
+    patch:
+      operationId: AuthController_changePassword
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePasswordDto"
+      responses:
+        "200":
+          description: ""
   /api/system-company:
     post:
       operationId: CompanyController_create
@@ -142,6 +155,32 @@ paths:
           in: path
           schema:
             type: string
+      responses:
+        "200":
+          description: ""
+  /api/auth/forgot-password/send-otp:
+    post:
+      operationId: ForgotPasswordController_sendOtp
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendOtpDto"
+      responses:
+        "200":
+          description: ""
+  /api/auth/forgot-password/reset:
+    post:
+      operationId: ForgotPasswordController_resetPassword
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResetPasswordDto"
       responses:
         "200":
           description: ""
@@ -1511,7 +1550,16 @@ components:
       bearerFormat: JWT
       type: http
   schemas:
+    ChangePasswordDto:
+      type: object
+      properties: {}
     CreateCompanyDto:
+      type: object
+      properties: {}
+    SendOtpDto:
+      type: object
+      properties: {}
+    ResetPasswordDto:
       type: object
       properties: {}
     CreateEmployeeDto:

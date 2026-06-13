@@ -45,6 +45,7 @@ export class Leave {
   @Column()
   type: string; // sick, casual, earned, etc.
 
+  @Column({ nullable: true })
   @IsString()
   @IsOptional()
   adminComment?: string;

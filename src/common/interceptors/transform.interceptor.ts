@@ -31,13 +31,26 @@ export class TransformInterceptor<T>
     const { method, originalUrl, body, params, query } = request;
     const startTime = Date.now();
 
-    // Log Request
-    this.logger.log(`Incoming Request: ${method} ${originalUrl}`);
+    // Log Request with Body
+    this.logger.log('\n' + JSON.stringify({ 
+      event: 'incoming_request_data', 
+      method, 
+      originalUrl, 
+      requestBody: Object.keys(body || {}).length ? body : undefined 
+    }, null, 2));
 
     return next.handle().pipe(
       tap((data) => {
         const responseTime = Date.now() - startTime;
-        this.logger.log(`Response: ${method} ${originalUrl} [${response.statusCode}] ${responseTime}ms`);
+        // Log Response with Data
+        this.logger.log('\n' + JSON.stringify({ 
+          event: 'outgoing_response_data', 
+          method, 
+          originalUrl, 
+          statusCode: response.statusCode, 
+          responseTimeMs: responseTime, 
+          responseData: data 
+        }, null, 2));
       }),
       map((data) => ({
         data,

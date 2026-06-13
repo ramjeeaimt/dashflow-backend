@@ -15,6 +15,9 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const status = exception.getStatus();
     const exceptionResponse = exception.getResponse();
 
+    // Log the exact validation error so we can see it in terminal!
+    console.error('\n❌ [Exception Filter Error]', JSON.stringify(exceptionResponse, null, 2), '\n');
+
     response.status(status).json({
       statusCode: status,
       timestamp: new Date().toISOString(),
