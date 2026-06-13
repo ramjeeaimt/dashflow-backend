@@ -308,15 +308,17 @@ export class AttendanceService {
           companyId: company?.id,
         };
 
-        // Send standard check-in confirmation if NOT late
+        // Send standard check-in FCM push to employee if NOT late (late/early already sent earlier)
         if (!isLate) {
-          this.mailService.sendCheckInEmail(employee.user.email, {
-            employeeName: empName,
-            time: saved.checkInTime,
-            status: saved.status,
-            date: today,
-            ...companyCtx,
-          }).catch(err => console.error('[AttendanceService] Check-in email failed:', err));
+          this.notificationsService.send({
+            title: 'Check-In Successful',
+            message: `You successfully checked in at ${saved.checkInTime}.`,
+            type: 'push',
+            recipientFilter: 'custom',
+            recipientIds: [employee.userId],
+            companyId: company?.id || '',
+            metadata: { type: 'attendance', severity: 'success' },
+          }).catch(err => console.error('[AttendanceService] FCM Check-In Employee failed:', err));
         }
 
         // Send late warning email if applicable
@@ -332,11 +334,12 @@ export class AttendanceService {
 
         // Notify Admins of Check-in
         this.getAdminEmails(employee).then(admins => {
+          const scheduledTimeRaw = employee.startTime || employee.checkInTime || company?.openingTime || '';
+          const scheduledTimeStr = this.formatTo12Hour(scheduledTimeRaw);
+          const statusLabel = saved.status === 'late' ? 'Arrived Late' : 'Checked In';
+          const bannerClass = saved.status === 'late' ? 'late' : '';
+
           admins.forEach(adminEmail => {
-            const scheduledTimeRaw = employee.startTime || employee.checkInTime || company?.openingTime || '';
-            const scheduledTimeStr = this.formatTo12Hour(scheduledTimeRaw);
-            const statusLabel = saved.status === 'late' ? 'Arrived Late' : 'Checked In';
-            const bannerClass = saved.status === 'late' ? 'late' : '';
             this.mailService.sendAdminAttendanceAlert(adminEmail, {
               alertTitle: `Employee ${statusLabel}`,
               bannerClass,
@@ -351,6 +354,17 @@ export class AttendanceService {
               ...companyCtx,
             }).catch(err => console.error(`[AttendanceService] Admin check-in email alert failed for ${adminEmail}:`, err));
           });
+
+          // Send FCM to Admins
+          this.notificationsService.send({
+            title: `Employee ${statusLabel}`,
+            message: `${empName} has registered a check-in at ${saved.checkInTime}.`,
+            type: 'push',
+            recipientFilter: 'admin',
+            companyId: company?.id || '',
+            metadata: { type: 'attendance', severity: saved.status === 'late' ? 'warning' : 'info' },
+          }).catch(err => console.error('[AttendanceService] FCM Admin Check-In failed:', err));
+
         }).catch(err => console.error('[AttendanceService] Admin lookup failed for check-in notification:', err));
       }
 
@@ -477,6 +491,17 @@ export class AttendanceService {
         ...companyCtx,
       }).catch(err => console.error('[AttendanceService] Check-out email failed:', err));
 
+      // Add FCM for Employee Checkout
+      this.notificationsService.send({
+        title: 'Check-Out Successful',
+        message: `You successfully checked out at ${formattedTime}. Daily total: ${saved.workHours || 0} hours.`,
+        type: 'push',
+        recipientFilter: 'custom',
+        recipientIds: [employee.userId],
+        companyId: co?.id || '',
+        metadata: { type: 'attendance', severity: 'info' },
+      }).catch(err => console.error('[AttendanceService] FCM Check-Out Employee failed:', err));
+
       // Notify Admins of Check-out
       this.getAdminEmails(employee)
         .then(admins => {
@@ -495,6 +520,16 @@ export class AttendanceService {
               ...companyCtx,
             }).catch(err => console.error(`[AttendanceService] Admin check-out email alert failed for ${adminEmail}:`, err));
           });
+
+          // Add FCM for Admin Checkout
+          this.notificationsService.send({
+            title: 'Employee Checked Out',
+            message: `${empName} has checked out at ${formattedTime}. Daily total: ${saved.workHours || 0} hours.`,
+            type: 'push',
+            recipientFilter: 'admin',
+            companyId: co?.id || '',
+            metadata: { type: 'attendance', severity: 'info' },
+          }).catch(err => console.error('[AttendanceService] FCM Admin Check-Out failed:', err));
         })
         .catch(err => console.error('[AttendanceService] Admin lookup failed for check-out notification:', err));
     }

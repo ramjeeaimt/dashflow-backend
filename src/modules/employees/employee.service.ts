@@ -99,10 +99,22 @@ export class EmployeeService {
       userId,
     });
 
-    // Generate Employee Code
-    const count = await this.employeeRepository.count();
-    const code = `DIF${(count + 1).toString().padStart(4, '0')}`;
-    employee.employeeCode = code;
+    if (!dto.employeeCode) {
+      throw new ConflictException('Employee Code is required.');
+    }
+
+    const employeeCodeUpper = dto.employeeCode.toUpperCase();
+
+    // Validate uniqueness inside the company
+    const existingCode = await this.employeeRepository.findOne({
+      where: { companyId: createEmployeeDto.companyId, employeeCode: employeeCodeUpper }
+    });
+
+    if (existingCode) {
+      throw new ConflictException(`Employee ID "${employeeCodeUpper}" is already in use by another employee in this company.`);
+    }
+
+    employee.employeeCode = employeeCodeUpper;
 
     const savedEmployee = await this.employeeRepository.save(employee);
 
@@ -294,6 +306,7 @@ export class EmployeeService {
       // EXPLICITLY pick only Employee entity fields
       const employeeUpdate: any = {};
       const validFields = [
+        'employeeCode',
         'companyId',
         'departmentId',
         'designationId',
@@ -375,12 +388,36 @@ export class EmployeeService {
             if (roleIds && user.email && isRolesChanged) {
               const roleNames = user.roles.map(r => r.name);
               console.log(`[EmployeeService] Roles updated for ${user.email}. Sending notification...`);
+              
               await this.mailService.sendRoleAssignmentNotification(user.email, {
                 employeeName: `${user.firstName || ''} ${user.lastName || ''}`.trim(),
                 roles: roleNames
               }).catch(err => console.error('[EmployeeService] Role notification failed:', err.message));
+
+              this.notificationsService.send({
+                title: 'Role Updated',
+                message: `Your account roles have been updated to: ${roleNames.join(', ')}.`,
+                type: 'push',
+                recipientFilter: 'custom',
+                recipientIds: [user.id],
+                companyId: employee.companyId || '',
+                metadata: { type: 'role_update', severity: 'info' }
+              }).catch(err => console.error('[EmployeeService] Role FCM failed:', err));
             }
           }
+        }
+      }
+
+      if (updateEmployeeDto.employeeCode && employee.companyId) {
+        const uppercaseCode = updateEmployeeDto.employeeCode.toUpperCase();
+        if (uppercaseCode !== employee.employeeCode) {
+          const existingCode = await this.employeeRepository.findOne({
+            where: { companyId: employee.companyId, employeeCode: uppercaseCode }
+          });
+          if (existingCode) {
+            throw new ConflictException(`Employee ID "${uppercaseCode}" is already in use by another employee in this company.`);
+          }
+          employeeUpdate.employeeCode = uppercaseCode;
         }
       }
 
@@ -551,5 +588,16 @@ export class EmployeeService {
     // 2. Sync Employee string field back to "Employee"
     employee.role = 'Employee';
     return this.employeeRepository.save(employee);
+  }
+
+  async getLastEmployeeCode(companyId: string): Promise<{ lastCode: string | null }> {
+    if (!companyId) {
+      return { lastCode: null };
+    }
+    const lastEmployee = await this.employeeRepository.findOne({
+      where: { companyId },
+      order: { createdAt: 'DESC' }
+    });
+    return { lastCode: lastEmployee?.employeeCode || null };
   }
 }

@@ -58,6 +58,15 @@ export class EmployeeController {
     return { count };
   }
 
+  @Get('last-code')
+  @CheckAbilities({ action: Action.Read, subject: 'employee' })
+  async getLastCode(@Query('companyId') companyId?: string, @Request() req?: any) {
+    const user = req?.user;
+    const isSuperAdmin = user && ['admin@difmo.com', 'info@difmo.com', 'hello@system.com'].includes(user.email);
+    const finalCompanyId = (!isSuperAdmin && user?.company?.id) ? user.company.id : companyId;
+    return this.employeeService.getLastEmployeeCode(finalCompanyId);
+  }
+
   @Get()
   async findAll(@Query() query: any, @Request() req: any) {
     const user = req.user;

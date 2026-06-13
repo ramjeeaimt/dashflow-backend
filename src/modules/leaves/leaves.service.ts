@@ -171,7 +171,7 @@ export class LeavesService {
   async findOne(id: string): Promise<Leave> {
     const leave = await this.leavesRepository.findOne({
       where: { id },
-      relations: ['employee', 'employee.user'],
+      relations: ['employee', 'employee.user', 'employee.company'],
     });
 
     if (!leave) {
@@ -232,7 +232,7 @@ export class LeavesService {
       console.error('[LeavesService] Failed to send admin notification:', err.message);
     }
 
-    // Also send direct email using nodemailer for important status updates
+    // Also send direct email using nodemailer for important status updates to employee
     try {
       const empEmail = updatedLeave.employee?.user?.email;
       if (empEmail) {
@@ -247,6 +247,51 @@ export class LeavesService {
       }
     } catch (emailErr) {
       console.error('[LeavesService] Failed to send direct leave email:', emailErr?.message || emailErr);
+    }
+
+    // 3. Email to Admins and Configured Attendance Alert Emails
+    try {
+      const adminEmails: string[] = [];
+      const companyId = updatedLeave.employee?.companyId;
+
+      if (updatedLeave.employee?.company?.attendanceAlertEmails) {
+        const configuredEmails = updatedLeave.employee.company.attendanceAlertEmails
+          .split(',')
+          .map(email => email.trim())
+          .filter(Boolean);
+        adminEmails.push(...configuredEmails);
+      }
+
+      if (companyId) {
+        const allEmployees = await this.employeeRepository.find({
+          where: { companyId, isDeleted: false },
+          relations: ['user', 'user.roles'],
+        });
+        const companyAdmins = allEmployees
+          .filter(emp => emp.user?.email && emp.user?.roles?.some(role => ['admin', 'super admin', 'superadmin', 'manager'].includes(role.name.toLowerCase())))
+          .map(emp => emp.user.email);
+        adminEmails.push(...companyAdmins);
+      }
+
+      if (updatedLeave.employee?.company?.email) {
+        adminEmails.push(updatedLeave.employee.company.email);
+      }
+
+      const uniqueAdmins = [...new Set(adminEmails)].filter(email => !!email);
+      const empName = `${updatedLeave.employee?.user?.firstName || ''} ${updatedLeave.employee?.user?.lastName || ''}`.trim() || 'Employee';
+      
+      uniqueAdmins.forEach(adminEmail => {
+        this.mailService.sendLeaveStatusEmail(adminEmail, {
+          employeeName: empName,
+          status: updatedLeave.status,
+          startDate: updatedLeave.startDate,
+          endDate: updatedLeave.endDate,
+          comment: updatedLeave.adminComment,
+          companyId: updatedLeave.employee?.companyId,
+        }).catch(err => console.error(`[LeavesService] Failed to send leave status update to admin ${adminEmail}:`, err));
+      });
+    } catch (err) {
+      console.error('[LeavesService] Admin email alerting failed for leave status update:', err);
     }
 
     return updatedLeave;

@@ -100,6 +100,9 @@ export class Company {
   attendanceAlertEmails: string; // comma-separated admin emails for attendance alerts
 
   @Column({ nullable: true })
+  payrollAlertEmails: string; // comma-separated emails for payroll alerts
+
+  @Column({ nullable: true })
   activeEmailTemplateId: string; // The selected global email template
 
   // ── Reward System ──────────────────────────────────────────────────

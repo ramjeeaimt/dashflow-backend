@@ -295,6 +295,7 @@ export class AuthService {
           await this.employeeService.create({
             userId: user.id,
             companyId: company.id,
+            employeeCode: `ADM-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
             firstName: user.firstName,
             lastName: user.lastName,
             email: user.email,

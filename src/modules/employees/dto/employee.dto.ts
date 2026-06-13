@@ -4,9 +4,14 @@ import {
   IsOptional,
   IsDateString,
   IsArray,
+  IsNotEmpty,
 } from 'class-validator';
 
 export class CreateEmployeeDto {
+  @IsString()
+  @IsNotEmpty()
+  employeeCode: string;
+
   @IsString()
   @IsOptional()
   userId?: string;
@@ -110,6 +115,10 @@ export class CreateEmployeeDto {
 
 
 export class UpdateEmployeeDto {
+  @IsString()
+  @IsOptional()
+  employeeCode?: string;
+
   @IsString()
   @IsOptional()
   firstName?: string;

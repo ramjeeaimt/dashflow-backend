@@ -7,6 +7,7 @@ import {
   ManyToOne,
   JoinColumn,
   OneToMany,
+  Unique,
 } from 'typeorm';
 import { User } from '../users/user.entity';
 import { Company } from '../companies/company.entity';
@@ -15,6 +16,7 @@ import { Designation } from '../designations/designation.entity';
 import { Leave } from '../leaves/leave.entity';
 
 @Entity()
+@Unique(['companyId', 'employeeCode'])
 export class Employee {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -29,7 +31,7 @@ export class Employee {
   @OneToMany(() => Leave, (leave) => leave.employee)
   leaves: Leave[];
 
-  @Column({ unique: true, nullable: true })
+  @Column({ nullable: true })
   employeeCode: string;
 
   @ManyToOne(() => Company)

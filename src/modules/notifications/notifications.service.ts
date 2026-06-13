@@ -223,8 +223,8 @@ export class NotificationsService implements OnModuleInit {
             const employees = dto.recipientIds?.length
                 ? await this.employeeRepo.find({
                     where: [
-                        { id: In(dto.recipientIds), companyId: dto.companyId, status: 'active' as any },
-                        { userId: In(dto.recipientIds), companyId: dto.companyId, status: 'active' as any },
+                        { id: In(dto.recipientIds), companyId: dto.companyId },
+                        { userId: In(dto.recipientIds), companyId: dto.companyId },
                     ],
                     relations: ['user'],
                 })

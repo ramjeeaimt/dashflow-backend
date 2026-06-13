@@ -11,7 +11,7 @@ async function sendTestPush() {
     console.log(`\n Preparing to send push notification to ALL users...`);
 
     // Connect to database
-    const dbUrl = process.env.DATABASE_URL_PROD || process.env.DATABASE_URL;
+    const dbUrl = process.env.DATABASE_URL_DEV || process.env.DATABASE_URL;
     const client = new Client({
         connectionString: dbUrl,
     });

@@ -6,6 +6,7 @@ import { Expense } from './entities/expense.entity';
 import { Company } from '../companies/company.entity';
 import { Employee } from '../employees/employee.entity';
 import { Attendance } from '../attendance/attendance.entity';
+import { User } from '../users/user.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
@@ -31,8 +32,10 @@ export class FinanceService {
     @InjectRepository(Attendance)
     private readonly attendanceRepository: Repository<Attendance>,
 
-    private readonly notificationsService: NotificationsService,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
 
+    private readonly notificationsService: NotificationsService,
 
   ) { }
 
@@ -71,7 +74,7 @@ export class FinanceService {
   async createPayroll(data: Partial<Payroll>): Promise<Payroll> {
     const payroll = await this.payrollRepository.save(this.payrollRepository.create(data));
 
-    // 🔥 Real-time Notification to Employee on Creation
+    //  Real-time Notification to Employee on Creation
     try {
       const emp = await this.employeeRepository.findOne({
         where: { id: payroll.employeeId },
@@ -98,9 +101,49 @@ export class FinanceService {
             employeeName: emp.user ? `${emp.user.firstName} ${emp.user.lastName}` : 'Employee'
           }
         });
+
+        // 🔥 Real-time Notification to Admin or Custom Emails
+        console.log(`[FinanceService] Notifying Admin/Custom of payroll creation for ${emp.id}`);
+
+        const company = await this.companyRepository.findOne({ where: { id: payroll.companyId } });
+        let alertEmails: string[] = [];
+        let alertUserIds: string[] = [];
+        let filter: any = 'admin';
+
+        if (company && company.payrollAlertEmails) {
+          alertEmails = company.payrollAlertEmails.split(',').map(e => e.trim()).filter(Boolean);
+          if (alertEmails.length > 0) {
+            filter = 'custom';
+            const adminUsers = await this.userRepository.createQueryBuilder('user')
+              .where('user.companyId = :companyId', { companyId: payroll.companyId })
+              .andWhere('user.email IN (:...emails)', { emails: alertEmails })
+              .getMany();
+            alertUserIds = adminUsers.map(u => u.id);
+          }
+        }
+
+        await this.notificationsService.send({
+          title: `Payroll Generated for ${emp.user ? emp.user.firstName : 'Employee'}`,
+          message: `Payroll for ${payroll.month}/${payroll.year} has been generated for ${emp.user ? `${emp.user.firstName} ${emp.user.lastName}` : 'Employee'}.`,
+          type: 'both',
+          recipientFilter: filter,
+          recipientEmails: filter === 'custom' ? alertEmails : undefined,
+          recipientIds: filter === 'custom' ? alertUserIds : undefined,
+          companyId: payroll.companyId,
+          metadata: {
+            type: 'PAYROLL_GENERATED',
+            month: payroll.month,
+            year: payroll.year,
+            netSalary: netSal,
+            basicSalary: payroll.basicSalary,
+            deductions: payroll.deductions,
+            allowances: payroll.allowances,
+            employeeName: `Admin (for ${emp.user ? emp.user.firstName : 'Employee'})`
+          }
+        });
       }
     } catch (err) {
-      console.error(`[FinanceService] Failed to notify employee on payroll creation:`, err.message);
+      console.error(`[FinanceService] Failed to notify employee/admin on payroll creation:`, err.message);
     }
 
     return payroll;
@@ -295,7 +338,7 @@ export class FinanceService {
 
       await this.payrollRepository.save(payroll);
 
-      // 🔥 Real-time Notification to Employee
+      //  Real-time Notification to Employee
       try {
         console.log(`[FinanceService] Notifying employee ${emp.id} of payroll generation. Net Salary: ${netSalary}`);
         await this.notificationsService.send({
@@ -311,11 +354,53 @@ export class FinanceService {
             year,
             netSalary,
             basicSalary: emp.salary,
+            deductions: leaveDeduction + halfDeduction,
+            allowances: overtimePay,
             employeeName: emp.user ? `${emp.user.firstName} ${emp.user.lastName}` : 'Employee'
           }
         });
+
+        // 🔥 Real-time Notification to Admin or Custom Emails
+        console.log(`[FinanceService] Notifying Admin/Custom of payroll generation for ${emp.id}`);
+
+        const company = await this.companyRepository.findOne({ where: { id: emp.companyId } });
+        let alertEmails: string[] = [];
+        let alertUserIds: string[] = [];
+        let filter: any = 'admin';
+
+        if (company && company.payrollAlertEmails) {
+          alertEmails = company.payrollAlertEmails.split(',').map(e => e.trim()).filter(Boolean);
+          if (alertEmails.length > 0) {
+            filter = 'custom';
+            const adminUsers = await this.userRepository.createQueryBuilder('user')
+              .where('user.companyId = :companyId', { companyId: emp.companyId })
+              .andWhere('user.email IN (:...emails)', { emails: alertEmails })
+              .getMany();
+            alertUserIds = adminUsers.map(u => u.id);
+          }
+        }
+
+        await this.notificationsService.send({
+          title: `Payroll Generated for ${emp.user ? emp.user.firstName : 'Employee'}`,
+          message: `Payroll for ${month}/${year} has been generated for ${emp.user ? `${emp.user.firstName} ${emp.user.lastName}` : 'Employee'}.`,
+          type: 'both',
+          recipientFilter: filter,
+          recipientEmails: filter === 'custom' ? alertEmails : undefined,
+          recipientIds: filter === 'custom' ? alertUserIds : undefined,
+          companyId: emp.companyId,
+          metadata: {
+            type: 'PAYROLL_GENERATED',
+            month,
+            year,
+            netSalary,
+            basicSalary: emp.salary,
+            deductions: leaveDeduction + halfDeduction,
+            allowances: overtimePay,
+            employeeName: `Admin (for ${emp.user ? emp.user.firstName : 'Employee'})`
+          }
+        });
       } catch (err) {
-        console.error(`[FinanceService] Failed to notify employee ${emp.id}:`, err.message);
+        console.error(`[FinanceService] Failed to notify employee/admin ${emp.id}:`, err.message);
       }
 
       payrolls.push({

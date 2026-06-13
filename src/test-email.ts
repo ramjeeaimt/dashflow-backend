@@ -24,6 +24,7 @@ async function bootstrap() {
     const employee = await employeeService.create({
       firstName: 'Pritam',
       lastName: 'Kumar',
+      employeeCode: 'TEST-EMP-001',
       email: 'pritamkumars811@gmail.com',
       companyId: company.id,
       phone: '1234567890',

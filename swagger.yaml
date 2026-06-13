@@ -365,6 +365,18 @@ paths:
       responses:
         "200":
           description: ""
+  /api/employees/last-code:
+    get:
+      operationId: EmployeeController_getLastCode
+      parameters:
+        - name: companyId
+          required: true
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
   /api/employees/{id}:
     get:
       operationId: EmployeeController_findOne
