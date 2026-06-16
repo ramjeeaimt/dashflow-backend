@@ -264,6 +264,7 @@ export class MailService {
     to: string,
     data: {
       employeeName: string;
+      checkInTime: string;
       time: string;
       date: string;
       workHours: number;
@@ -276,15 +277,16 @@ export class MailService {
     },
   ) {
     const formattedTime = this.formatTo12Hour(data.time);
-    const subject = `Check-out Summary: ${data.employeeName} - ${data.date}`;
+    const subject = `Attendance Summary: ${data.employeeName} - ${data.date}`;
     const color = '#3b82f6';
     const defaultMsgHtml = `
       <div style="background: #f8fafc; border-left: 4px solid ${color}; padding: 24px; margin-bottom: 32px; border-radius: 4px;">
-        <h2 style="color: ${color}; font-size: 20px; font-weight: 800; margin: 0 0 12px 0;">Check-out Summary</h2>
-        <p style="margin: 0; color: #475569; font-size: 15px;">Your check-out has been successfully recorded.</p>
+        <h2 style="color: ${color}; font-size: 20px; font-weight: 800; margin: 0 0 12px 0;">Attendance Summary</h2>
+        <p style="margin: 0; color: #475569; font-size: 15px;">Your attendance summary has been successfully recorded.</p>
         <div style="margin-top: 16px; font-size: 14px;">
           <p style="margin: 4px 0;"><strong>Employee:</strong> ${data.employeeName}</p>
           <p style="margin: 4px 0;"><strong>Date:</strong> ${data.date}</p>
+          <p style="margin: 4px 0;"><strong>Check-in Time:</strong> ${data.checkInTime}</p>
           <p style="margin: 4px 0;"><strong>Check-out Time:</strong> ${formattedTime}</p>
           <p style="margin: 4px 0;"><strong>Total Work Hours:</strong> ${data.workHours.toFixed(2)} hrs</p>
           <p style="margin: 4px 0;"><strong>Overtime:</strong> ${data.overtime.toFixed(2)} hrs</p>

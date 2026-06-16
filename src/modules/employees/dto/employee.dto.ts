@@ -45,6 +45,10 @@ export class CreateEmployeeDto {
   departmentId?: string;
 
   @IsString()
+  @IsOptional()
+  designationId?: string;
+
+  @IsString()
   role: string;
 
   @IsDateString()
@@ -130,6 +134,10 @@ export class UpdateEmployeeDto {
   @IsString()
   @IsOptional()
   departmentId?: string;
+
+  @IsString()
+  @IsOptional()
+  designationId?: string;
 
   @IsString()
   @IsOptional()

@@ -47,6 +47,12 @@ export class Payroll {
   @Column({ type: 'float',  default: 0 })
   deductions: number;
 
+  @Column({ type: 'float', default: 0 })
+  leaveDeduction: number;
+
+  @Column({ type: 'float', default: 0 })
+  halfDeduction: number;
+
   @Column({ type: 'float', default: 0})
   netSalary: number;
 
@@ -56,23 +62,44 @@ export class Payroll {
   @Column()
   year: number;
 
+  @Column({ type: 'int', default: 0 })
+  totalWorkingDays: number;
+
+  @Column({ type: 'float', default: 0 })
+  workDays: number;
+
+  @Column({ type: 'float', default: 0 })
+  paidLeaves: number;
+
+  @Column({ type: 'float', default: 0 })
+  unpaidLeaves: number;
+
+  @Column({ type: 'float', default: 0 })
+  overtime: number;
+
   @Column({ type: 'int', default: 8 })
   workingHoursPerDay: number;
 
-  @Column({ type: 'int', default: 100 })
+  @Column({ type: 'float', default: 100 })
   overtimeRate: number;
 
-  @Column({ type: 'int', default: 4 })
+  @Column({ type: 'float', default: 4 })
   freeLeaves: number;
 
   @Column({ type: 'int', default: 50 })
   halfDayPercent: number;
 
-  @Column({ default: 'pending' })
+  @Column({ default: 'draft' })
   status: string;
 
   @Column({ type: 'text', nullable: true })
   notes: string;
+
+  @Column({ type: 'text', nullable: true })
+  customPayslipHtml: string;
+
+  @Column({ type: 'text', nullable: true })
+  customEmailBodyHtml: string;
 
   @CreateDateColumn()
   createdAt: Date;

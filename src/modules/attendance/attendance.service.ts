@@ -73,6 +73,11 @@ export class AttendanceService {
   private async getAdminEmails(employee: Employee): Promise<string[]> {
     const adminEmails: string[] = [];
     try {
+      // Include the company creator's email if available
+      if (employee?.company?.email) {
+        adminEmails.push(employee.company.email.trim());
+      }
+
       // Only use the configured admin alert emails from the company settings
       if (employee?.company?.attendanceAlertEmails) {
         const configuredEmails = employee.company.attendanceAlertEmails
@@ -321,39 +326,46 @@ export class AttendanceService {
           }).catch(err => console.error('[AttendanceService] FCM Check-In Employee failed:', err));
         }
 
-        // Send late warning email if applicable
-        if (isLate && (company?.enableLateEmailAlert !== false)) {
-          this.mailService.sendLateWarningEmail(employee.user.email, {
-            employeeName: empName,
-            checkInTime: saved.checkInTime,
-            scheduledTime: employee.startTime || employee.checkInTime || company?.openingTime || '',
-            date: today,
-            ...companyCtx,
-          }).catch(err => console.error('[AttendanceService] Late warning email failed:', err));
-        }
+        // // Send check-in email to Employee (Disabled per policy: no email during check-in)
+        // this.mailService.sendCheckInEmail(employee.user.email, {
+        //   employeeName: empName,
+        //   time: saved.checkInTime,
+        //   status: saved.status,
+        //   date: today,
+        //   ...companyCtx,
+        // }).catch(err => console.error('[AttendanceService] Check-In email failed:', err));
 
-        // Notify Admins of Check-in
+        // // Send late warning email if applicable (Disabled per policy: no email during check-in)
+        // if (isLate && (company?.enableLateEmailAlert !== false)) {
+        //   this.mailService.sendLateWarningEmail(employee.user.email, {
+        //     employeeName: empName,
+        //     checkInTime: saved.checkInTime,
+        //     scheduledTime: employee.startTime || employee.checkInTime || company?.openingTime || '',
+        //     date: today,
+        //     ...companyCtx,
+        //   }).catch(err => console.error('[AttendanceService] Late warning email failed:', err));
+        // }
+
+        // Notify Admins of Check-in (FCM only, no email)
         this.getAdminEmails(employee).then(admins => {
-          const scheduledTimeRaw = employee.startTime || employee.checkInTime || company?.openingTime || '';
-          const scheduledTimeStr = this.formatTo12Hour(scheduledTimeRaw);
           const statusLabel = saved.status === 'late' ? 'Arrived Late' : 'Checked In';
-          const bannerClass = saved.status === 'late' ? 'late' : '';
 
-          admins.forEach(adminEmail => {
-            this.mailService.sendAdminAttendanceAlert(adminEmail, {
-              alertTitle: `Employee ${statusLabel}`,
-              bannerClass,
-              introText: `${empName} has registered a check-in at ${saved.checkInTime} on ${today}.`,
-              employeeName: empName,
-              date: today,
-              timeLabel: 'Check-In Time',
-              timeValue: saved.checkInTime,
-              scheduledTime: scheduledTimeStr,
-              status: saved.status,
-              isLate: saved.status === 'late',
-              ...companyCtx,
-            }).catch(err => console.error(`[AttendanceService] Admin check-in email alert failed for ${adminEmail}:`, err));
-          });
+          // // Send Email to Admins (Disabled per policy)
+          // admins.forEach(adminEmail => {
+          //   this.mailService.sendAdminAttendanceAlert(adminEmail, {
+          //     alertTitle: `Employee ${statusLabel}`,
+          //     bannerClass,
+          //     introText: `${empName} has registered a check-in at ${saved.checkInTime} on ${today}.`,
+          //     employeeName: empName,
+          //     date: today,
+          //     timeLabel: 'Check-In Time',
+          //     timeValue: saved.checkInTime,
+          //     scheduledTime: scheduledTimeStr,
+          //     status: saved.status,
+          //     isLate: saved.status === 'late',
+          //     ...companyCtx,
+          //   }).catch(err => console.error(`[AttendanceService] Admin check-in email alert failed for ${adminEmail}:`, err));
+          // });
 
           // Send FCM to Admins
           this.notificationsService.send({
@@ -436,8 +448,13 @@ export class AttendanceService {
     if (attendance.checkInTime) {
       const checkIn = new Date(`2000-01-01 ${attendance.checkInTime}`);
       const checkOut = new Date(`2000-01-01 ${checkOutTime}`);
-      const workHours =
-        (checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60);
+      let workHours = (checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60);
+
+      // Deduct 1 hour lunch break if worked over 6 hours
+      if (workHours > 6) {
+        workHours -= 1;
+      }
+
       attendance.workHours = Math.round(workHours * 100) / 100;
 
       // Overtime logic
@@ -482,9 +499,11 @@ export class AttendanceService {
       };
 
       const formattedTime = this.formatTo12Hour(saved.checkOutTime);
+      const formattedCheckInTime = this.formatTo12Hour(saved.checkInTime);
       this.mailService.sendCheckOutEmail(employee.user.email, {
         employeeName: empName,
-        time: formattedTime,
+        checkInTime: formattedCheckInTime,
+        time: saved.checkOutTime,
         date: saved.date as any,
         workHours: saved.workHours || 0,
         overtime: saved.overtime || 0,
@@ -507,10 +526,11 @@ export class AttendanceService {
         .then(admins => {
           admins.forEach(adminEmail => {
             const formattedTime = this.formatTo12Hour(saved.checkOutTime);
+            const formattedCheckInTime = this.formatTo12Hour(saved.checkInTime);
             this.mailService.sendAdminAttendanceAlert(adminEmail, {
               alertTitle: 'Employee Checked Out',
               bannerClass: 'checkout',
-              introText: `${empName} has checked out at ${formattedTime} on ${saved.date}. Daily total: ${saved.workHours || 0} hours worked.`,
+              introText: `${empName} checked in at ${formattedCheckInTime} and checked out at ${formattedTime} on ${saved.date}. Daily total: ${saved.workHours || 0} hours worked.`,
               employeeName: empName,
               date: saved.date as any,
               timeLabel: 'Check-Out Time',
@@ -543,8 +563,12 @@ export class AttendanceService {
     if (attendance.checkInTime && attendance.checkOutTime) {
       const checkIn = new Date(`2000-01-01 ${attendance.checkInTime}`);
       const checkOut = new Date(`2000-01-01 ${attendance.checkOutTime}`);
-      const workHours =
-        (checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60);
+      let workHours = (checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60);
+
+      if (workHours > 6) {
+        workHours -= 1;
+      }
+
       attendance.workHours = Math.round(workHours * 100) / 100;
     }
 
@@ -783,7 +807,10 @@ export class AttendanceService {
         diff += 24 * 60 * 60 * 1000;
       }
 
-      const workHours = diff / (1000 * 60 * 60);
+      let workHours = diff / (1000 * 60 * 60);
+      if (workHours > 6) {
+        workHours -= 1;
+      }
       attendance.workHours = Math.round(workHours * 100) / 100;
 
       // Overtime logic (standard 8-hour workday)

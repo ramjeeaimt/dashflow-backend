@@ -1007,12 +1007,31 @@ paths:
       responses:
         "201":
           description: ""
+  /api/finance/bulk-generate:
+    post:
+      operationId: FinanceController_bulkGeneratePayroll
+      parameters: []
+      responses:
+        "201":
+          description: ""
   /api/finance/generate-single:
     post:
       operationId: FinanceController_generateSingle
       parameters: []
       responses:
         "201":
+          description: ""
+  /api/finance/payroll/{id}/custom-html:
+    put:
+      operationId: FinanceController_saveCustomHtml
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "200":
           description: ""
   /api/finance/summary:
     get:
@@ -1064,9 +1083,9 @@ paths:
       responses:
         "200":
           description: ""
-  /api/finance/payroll/{id}/send-email:
+  /api/finance/payroll/{id}/send:
     post:
-      operationId: FinanceController_sendPayrollEmail
+      operationId: FinanceController_finalizeAndSendPayroll
       parameters:
         - name: id
           required: true

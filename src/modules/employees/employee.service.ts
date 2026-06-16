@@ -94,6 +94,9 @@ export class EmployeeService {
       await this.userService.assignRole(userId, 'Employee');
     }
 
+    if (dto.departmentId === '') (dto as any).departmentId = null;
+    if (dto.designationId === '') (dto as any).designationId = null;
+
     const employee = this.employeeRepository.create({
       ...dto,
       userId,
@@ -330,7 +333,11 @@ export class EmployeeService {
 
       validFields.forEach((field) => {
         if (updateEmployeeDto[field] !== undefined) {
-          employeeUpdate[field] = updateEmployeeDto[field];
+          if ((field === 'departmentId' || field === 'designationId') && updateEmployeeDto[field] === '') {
+            employeeUpdate[field] = null;
+          } else {
+            employeeUpdate[field] = updateEmployeeDto[field];
+          }
         }
       });
 

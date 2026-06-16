@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Brackets } from 'typeorm';
+import { Repository, Brackets, In } from 'typeorm';
 import { Payroll } from './entities/payroll.entity';
 import { Expense } from './entities/expense.entity';
 import { Company } from '../companies/company.entity';
@@ -10,6 +10,8 @@ import { User } from '../users/user.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
+import puppeteer from 'puppeteer-core';
+const chromium = require('@sparticuz/chromium');
 const PDFDocument = require('pdfkit');
 
 import { Settings } from 'http2';
@@ -60,6 +62,25 @@ export class FinanceService {
   }
 
   /**
+   * Calculates the exact number of active working days in a specific month based on company settings
+   */
+  private getExactWorkingDaysInMonth(year: number, month: number, workingDaysArr?: string[]): number {
+    if (!workingDaysArr || workingDaysArr.length === 0) {
+      return 30; // Fallback
+    }
+    const daysInMonth = new Date(year, month, 0).getDate();
+    let count = 0;
+    for (let i = 1; i <= daysInMonth; i++) {
+      const d = new Date(year, month - 1, i);
+      const dayName = d.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
+      if (workingDaysArr.includes(dayName)) {
+        count++;
+      }
+    }
+    return count;
+  }
+
+  /**
    * Cleans a currency string and converts to number
    */
   private parseSalary(salary: string | number): number {
@@ -84,8 +105,8 @@ export class FinanceService {
         const netSal = this.parseSalary(payroll.netSalary);
         console.log(`[FinanceService] Notifying employee ${emp.id} of payroll creation. Net Salary: ${netSal}`);
         await this.notificationsService.send({
-          title: 'Difmo Pvt Ltd: Payroll Slip Generated',
-          message: `Your payroll for ${payroll.month}/${payroll.year} has been generated. Net Salary: ₹${netSal.toFixed(2)}.`,
+          title: 'Difmo Pvt Ltd: Salary Slip Generated',
+          message: `Your salary slip for ${payroll.month}/${payroll.year} has been generated. Net Salary: ₹${netSal.toFixed(2)}.`,
           type: 'both',
           recipientFilter: 'employees',
           recipientIds: [emp.userId],
@@ -162,7 +183,10 @@ export class FinanceService {
 
     const query = this.payrollRepository.createQueryBuilder('payroll')
       .leftJoinAndSelect('payroll.employee', 'employee')
-      .leftJoinAndSelect('employee.user', 'user');
+      .leftJoinAndSelect('employee.user', 'user')
+      .leftJoinAndSelect('employee.company', 'company')
+      .leftJoinAndSelect('employee.department', 'department')
+      .leftJoinAndSelect('employee.designation', 'designation');
 
     if (companyId && companyId !== 'undefined') {
       query.andWhere(new Brackets(qb => {
@@ -193,14 +217,46 @@ export class FinanceService {
     // 5. IMPORTANT: Duplicate records hatao
     // TypeORM ka getMany() QueryBuilder ke saath internally handles mapping, 
     // but hum explicitly order handle karenge
-    query.orderBy('payroll.year', 'DESC')
-      .addOrderBy('payroll.month', 'DESC')
+    query.orderBy('payroll.updatedAt', 'DESC')
       .addOrderBy('payroll.id', 'ASC'); // ID par order dene se duplicates identify karna easy hota hai
 
     const results = await query.getMany();
 
-    // 6. Final Safety Net: Agar abhi bhi DB level se duplicates aa rahe hain (Unique IDs filter)
-    const uniquePayrolls = Array.from(new Map(results.map(item => [item.id, item])).values());
+    // 6. Final Safety Net: DB duplicates hatane ke liye (Group by employeeId + month + year)
+    const latestPayrollsMap = new Map();
+    for (const item of results) {
+      const key = `${item.employeeId}-${item.month}-${item.year}`;
+      if (!latestPayrollsMap.has(key)) {
+        latestPayrollsMap.set(key, item);
+      } else {
+        const existing = latestPayrollsMap.get(key);
+        if (new Date(item.updatedAt) > new Date(existing.updatedAt)) {
+          latestPayrollsMap.set(key, item);
+        }
+      }
+    }
+    const uniquePayrolls = Array.from(latestPayrollsMap.values());
+
+    // 7. Calculate yearly leaves taken for each employee in the target year
+    const queryYear = year || new Date().getFullYear();
+    try {
+      const yearlyLeaves = await this.payrollRepository.createQueryBuilder('p')
+        .select('p.employeeId', 'employeeId')
+        .addSelect('SUM(p.paidLeaves)', 'totalPaidLeaves')
+        .where('p.year = :year', { year: queryYear })
+        .groupBy('p.employeeId')
+        .getRawMany();
+
+      const yearlyLeavesMap = new Map(
+        yearlyLeaves.map(item => [item.employeeId, Number(item.totalPaidLeaves) || 0])
+      );
+
+      uniquePayrolls.forEach(p => {
+        (p as any).yearlyLeavesTaken = yearlyLeavesMap.get(p.employeeId) || 0;
+      });
+    } catch (err) {
+      console.error('[FinanceService] Failed to calculate yearly leaves:', err);
+    }
 
     return uniquePayrolls;
   }
@@ -244,14 +300,21 @@ export class FinanceService {
   }
 
 
-  async generateMonthlyPayroll(month: number, year: number) {
+  async generateMonthlyPayroll(month: number, year: number, companyId: string, employeeId?: string) {
     // Get all employees with company relation to read policy settings
-    const employees = await this.employeeRepository.find({ relations: ['company'] });
+    const whereClause: any = { companyId };
+    if (employeeId) {
+      whereClause.id = employeeId;
+    }
+    const employees = await this.employeeRepository.find({
+      where: whereClause,
+      relations: ['company']
+    });
 
     // Default payroll settings (overridden by per-company config when available)
     const defaultWorkingHours = 8;
     const defaultOvertimeRate = 100;
-    const defaultFreeLeaves = 4;
+    const defaultFreeLeaves = 1;
     const defaultHalfPercent = 50;
 
     let totalBasic = 0;
@@ -260,21 +323,32 @@ export class FinanceService {
     let payrolls: any[] = [];
 
     for (const emp of employees) {
-      // Prevent duplicate payroll for the same month/year
       const existing = await this.payrollRepository.findOne({
         where: { employeeId: emp.id, month, year },
       });
-      if (existing) continue;
+      if (existing) {
+        if (existing.status === 'sent' || existing.status === 'paid') {
+          continue; // Skip if already finalized
+        } else if (!employeeId) {
+          // If bulk generating (no specific employee), skip existing drafts!
+          continue;
+        } else {
+          // If generating for a specific employee, remove the draft to recalculate
+          await this.payrollRepository.remove(existing);
+        }
+      }
 
       // Get attendance for this employee for the month
       const attendance = await this.attendanceRepository.find({
         where: { employeeId: emp.id },
       });
 
+      let presentDays = 0;
       let halfDays = 0;
       let leaveDays = 0;
       let absentDays = 0;
-      let overtimeHours = 0;
+      let totalDailyOvertime = 0;
+      let totalDailyUndertime = 0;
 
       for (const att of attendance) {
         const attDate = new Date(att.date);
@@ -283,125 +357,114 @@ export class FinanceService {
 
         let hoursWorked = 0;
         if (att.checkInTime && att.checkOutTime) {
-          const inTime = new Date(att.checkInTime);
-          const outTime = new Date(att.checkOutTime);
+          const inStr = String(att.checkInTime).includes('T') ? String(att.checkInTime) : `1970-01-01T${att.checkInTime}Z`;
+          const outStr = String(att.checkOutTime).includes('T') ? String(att.checkOutTime) : `1970-01-01T${att.checkOutTime}Z`;
+          const inTime = new Date(inStr);
+          const outTime = new Date(outStr);
           hoursWorked = (outTime.getTime() - inTime.getTime()) / (1000 * 60 * 60);
+          if (hoursWorked > 6) {
+            hoursWorked -= 1;
+          }
         }
 
+        if (['present', 'late', 'early_checkin', 'early_departure', 'wfh'].includes(att.status)) {
+          presentDays++;
+
+          // Calculate overtime and undertime only for present-type days
+          if (hoursWorked > defaultWorkingHours) {
+            totalDailyOvertime += (hoursWorked - defaultWorkingHours);
+          } else if (hoursWorked < defaultWorkingHours) {
+            totalDailyUndertime += (defaultWorkingHours - hoursWorked);
+          }
+        }
         if (att.status === 'half-day') halfDays++;
         if (att.status === 'leave') leaveDays++;
         if (att.status === 'absent') absentDays++;
-
-        if (hoursWorked > defaultWorkingHours) {
-          overtimeHours += hoursWorked - defaultWorkingHours;
-        }
       }
 
-      const basicSalary = this.parseSalary(emp.salary) || 20000;
-      const perDay = basicSalary / 30;
+      let overtimeHours = Math.max(0, totalDailyOvertime - totalDailyUndertime);
+
+      const basicSalary = Number(this.parseSalary(emp.salary)) || 0;
+
+      // Calculate Exact Working Days for Per Day calculation
+      const workingDaysArr = emp.company?.workingDays;
+      const exactWorkingDaysInMonth = Number(this.getExactWorkingDaysInMonth(year, month, workingDaysArr)) || 22;
+
+      // Calculate missing working days (unattended/unlogged days) as absent days
+      const missingDays = Math.max(0, exactWorkingDaysInMonth - (presentDays + halfDays + leaveDays + absentDays));
+      absentDays += missingDays;
+
+      const perDay = exactWorkingDaysInMonth > 0 ? (basicSalary / exactWorkingDaysInMonth) : 0;
 
       // Use company-configured half-day pay percent if available, else default to 50%
-      const halfPercent = emp.company?.halfDayPayPercent ?? defaultHalfPercent;
-      const freeLeaves = defaultFreeLeaves;
+      const halfPercent = Number(emp.company?.halfDayPayPercent) || defaultHalfPercent;
+      const casualLeavesPerYear = Number(emp.company?.casualLeavesPerYear) || 12;
+      const freeLeaves = casualLeavesPerYear / 12;
 
       // Leaves deduction logic: first N leaves free
       const extraLeaves = leaveDays > freeLeaves ? leaveDays - freeLeaves : 0;
-      const leaveDeduction = extraLeaves * perDay + absentDays * perDay;
+      const leaveDeduction = Number(extraLeaves * perDay + absentDays * perDay) || 0;
 
       // Half-day deduction uses company-configured percentage
-      const halfDeduction = halfDays * (perDay * (halfPercent / 100));
+      const halfDeduction = Number(halfDays * (perDay * (halfPercent / 100))) || 0;
+
+      // Fetch dynamic overtime configs
+      const overtimePolicy = emp.company?.overtimePolicy || 'fixed';
+      let dynamicOvertimeRate = 0;
+
+      if (overtimePolicy === 'fixed') {
+        dynamicOvertimeRate = Number(emp.company?.overtimeRatePerHour) || 0;
+      } else {
+        // Variable Overtime Rate: (Monthly Salary / Total Working Days) / Working Hours Per Day
+        const perHour = defaultWorkingHours > 0 ? (perDay / defaultWorkingHours) : 0;
+        const percentage = Number(emp.company?.overtimeMultiplier) || 100.0;
+        dynamicOvertimeRate = Number(perHour * (percentage / 100.0)) || 0;
+      }
 
       // Overtime pay
-      const overtimePay = overtimeHours * defaultOvertimeRate;
+      const overtimePay = Number(overtimeHours * dynamicOvertimeRate) || 0;
 
-      // Final net salary
-      const netSalary = basicSalary - leaveDeduction - halfDeduction + overtimePay;
+      // Allowance
+      let allowanceAmount = Number(emp.company?.allowanceAmount) || 0;
+
+      // Final net salary calculation
+      let baseAfterDeduction = basicSalary - leaveDeduction - halfDeduction;
+      if (baseAfterDeduction <= 0) {
+        baseAfterDeduction = 0;
+        allowanceAmount = 0; // No allowance if completely absent
+      }
+
+      const netSalary = Number(baseAfterDeduction + overtimePay + allowanceAmount) || 0;
 
       totalBasic += basicSalary;
       totalNet += netSalary;
       totalDeduction += leaveDeduction + halfDeduction;
 
-      // Save payroll record (persist the actual percent used for audit trail)
+      // Save payroll record as a draft
       const payroll = this.payrollRepository.create({
         employeeId: emp.id,
         companyId: emp.companyId,
-        basicSalary,
-        netSalary,
+        basicSalary: Math.round(basicSalary),
+        allowances: Math.round(allowanceAmount),
+        deductions: Math.round(leaveDeduction + halfDeduction),
+        leaveDeduction: Math.round(leaveDeduction),
+        halfDeduction: Math.round(halfDeduction),
+        overtime: Math.round(overtimePay),
+        netSalary: Math.round(netSalary),
         month,
         year,
-        workingHoursPerDay: defaultWorkingHours,
-        overtimeRate: defaultOvertimeRate,
-        freeLeaves,
-        halfDayPercent: halfPercent,
-        status: 'unpaid',
+        totalWorkingDays: exactWorkingDaysInMonth,
+        workDays: presentDays + halfDays,
+        paidLeaves: Math.min(leaveDays, freeLeaves),
+        unpaidLeaves: extraLeaves,
+        workingHoursPerDay: Math.round(defaultWorkingHours),
+        overtimeRate: Math.round(dynamicOvertimeRate),
+        freeLeaves: Math.round(freeLeaves),
+        halfDayPercent: Math.round(halfPercent),
+        status: 'draft', // Set to draft, requires manual review
       });
 
       await this.payrollRepository.save(payroll);
-
-      //  Real-time Notification to Employee
-      try {
-        console.log(`[FinanceService] Notifying employee ${emp.id} of payroll generation. Net Salary: ${netSalary}`);
-        await this.notificationsService.send({
-          title: 'Difmo Pvt Ltd: Payroll Generated',
-          message: `Your payroll for ${month}/${year} has been generated. Net Salary: ₹${netSalary.toFixed(2)}.`,
-          type: 'both',
-          recipientFilter: 'employees',
-          recipientIds: [emp.userId],
-          companyId: emp.companyId,
-          metadata: {
-            type: 'PAYROLL_GENERATED',
-            month,
-            year,
-            netSalary,
-            basicSalary: emp.salary,
-            deductions: leaveDeduction + halfDeduction,
-            allowances: overtimePay,
-            employeeName: emp.user ? `${emp.user.firstName} ${emp.user.lastName}` : 'Employee'
-          }
-        });
-
-        // 🔥 Real-time Notification to Admin or Custom Emails
-        console.log(`[FinanceService] Notifying Admin/Custom of payroll generation for ${emp.id}`);
-
-        const company = await this.companyRepository.findOne({ where: { id: emp.companyId } });
-        let alertEmails: string[] = [];
-        let alertUserIds: string[] = [];
-        let filter: any = 'admin';
-
-        if (company && company.payrollAlertEmails) {
-          alertEmails = company.payrollAlertEmails.split(',').map(e => e.trim()).filter(Boolean);
-          if (alertEmails.length > 0) {
-            filter = 'custom';
-            const adminUsers = await this.userRepository.createQueryBuilder('user')
-              .where('user.companyId = :companyId', { companyId: emp.companyId })
-              .andWhere('user.email IN (:...emails)', { emails: alertEmails })
-              .getMany();
-            alertUserIds = adminUsers.map(u => u.id);
-          }
-        }
-
-        await this.notificationsService.send({
-          title: `Payroll Generated for ${emp.user ? emp.user.firstName : 'Employee'}`,
-          message: `Payroll for ${month}/${year} has been generated for ${emp.user ? `${emp.user.firstName} ${emp.user.lastName}` : 'Employee'}.`,
-          type: 'both',
-          recipientFilter: filter,
-          recipientEmails: filter === 'custom' ? alertEmails : undefined,
-          recipientIds: filter === 'custom' ? alertUserIds : undefined,
-          companyId: emp.companyId,
-          metadata: {
-            type: 'PAYROLL_GENERATED',
-            month,
-            year,
-            netSalary,
-            basicSalary: emp.salary,
-            deductions: leaveDeduction + halfDeduction,
-            allowances: overtimePay,
-            employeeName: `Admin (for ${emp.user ? emp.user.firstName : 'Employee'})`
-          }
-        });
-      } catch (err) {
-        console.error(`[FinanceService] Failed to notify employee/admin ${emp.id}:`, err.message);
-      }
 
       payrolls.push({
         employeeId: emp.id,
@@ -430,94 +493,172 @@ export class FinanceService {
   async generatePayroll(payload: { attendanceId: string; month: number; year: number }) {
     const { attendanceId, month, year } = payload;
 
-    // 1️⃣ Find attendance
     const attendance = await this.attendanceRepository.findOne({
       where: { id: attendanceId },
     });
-
     if (!attendance) throw new Error('Attendance not found');
     if (!attendance.employeeId) throw new Error('Attendance has no employeeId');
 
-    // 2️⃣ Find employee
     const emp = await this.employeeRepository.findOne({
       where: { id: attendance.employeeId },
+      relations: ['company'],
     });
-
     if (!emp) throw new Error('Employee not found');
 
-    // 3️⃣ Default settings (you can also store in DB if needed)
-    const basicSalary = this.parseSalary(emp.salary) || 20000;
-    const workingHours = 8;       // per day
-    const overtimeRate = 100;     // per hour
-    const freeLeaves = 4;         // first 4 leaves free
-    const halfPercent = 50;       // half-day deduction %
+    // Delegate to robust monthly bulk generator for accurate monthly aggregation
+    const result = await this.generateMonthlyPayroll(month, year, emp.companyId, emp.id);
 
-    // 4️⃣ Attendance calculations
-    let hoursWorked = 0;
-    let halfDays = 0;
-    let leaveDays = 0;
-    let absentDays = 0;
-
-    // check in/out hours
-    if (attendance.checkInTime && attendance.checkOutTime) {
-      const inTime = new Date(attendance.checkInTime);
-      const outTime = new Date(attendance.checkOutTime);
-      hoursWorked = (outTime.getTime() - inTime.getTime()) / (1000 * 60 * 60); // hours
+    if (result.payrolls && result.payrolls.length > 0) {
+      return { message: 'Payroll Generated', payroll: result.payrolls[0] };
     }
 
-    // status checks
-    if (attendance.status === 'half-day') halfDays++;
-    if (attendance.status === 'leave') leaveDays++;
-    if (attendance.status === 'absent') absentDays++;
+    return { message: 'Payroll generation skipped or failed', payroll: null };
+  }
 
-    // 5️⃣ Calculations
-    const perDay = basicSalary / 30;
-
-    // leave deduction logic
-    const extraLeaves = leaveDays > freeLeaves ? leaveDays - freeLeaves : 0;
-    const leaveDeduction = extraLeaves * perDay + absentDays * perDay;
-
-    // half-day deduction
-    const halfDeduction = halfDays * (perDay * (halfPercent / 100));
-
-    // overtime pay
-    const overtimePay = hoursWorked > workingHours ? (hoursWorked - workingHours) * overtimeRate : 0;
-
-    // net salary
-    const netSalary = basicSalary - leaveDeduction - halfDeduction + overtimePay;
-
-    // 6️⃣ Save payroll
-    const payroll = this.payrollRepository.create({
-      employeeId: emp.id,
-      companyId: emp.companyId,
-      basicSalary,
-      deductions: leaveDeduction + halfDeduction,
-      netSalary,
-      month,
-      year,
-      workingHoursPerDay: workingHours,
-      overtimeRate,
-      freeLeaves,
-      halfDayPercent: halfPercent,
-      status: 'unpaid',
+  async finalizeAndSendPayroll(payrollId: string, payslipHtml: string, emailBodyHtml: string) {
+    const payroll = await this.payrollRepository.findOne({
+      where: { id: payrollId },
+      relations: ['employee', 'employee.user'],
     });
 
-    await this.payrollRepository.save(payroll);
+    if (!payroll) throw new NotFoundException('Payroll not found');
 
-    // 7️⃣ Return detailed info
-    return {
-      message: 'Payroll Generated ',
-      payroll: {
-        employeeId: emp.id,
-        basicSalary,
-        leaveDeduction,
-        halfDeduction,
-        overtimePay,
-        netSalary,
-        month,
-        year,
-      },
-    };
+    // Save custom HTML templates and sync parsed numeric values to database columns
+    payroll.customPayslipHtml = payslipHtml;
+    payroll.customEmailBodyHtml = emailBodyHtml;
+    this.syncPayrollValuesFromHtml(payroll, payslipHtml);
+
+    const emp = payroll.employee;
+    const user = emp?.user;
+
+    // Generate PDF using Puppeteer
+    const executablePath = await chromium.executablePath();
+    const browser = await puppeteer.launch({
+      args: chromium.args,
+      defaultViewport: chromium.defaultViewport,
+      executablePath: executablePath || '/usr/bin/google-chrome', // fallback for local dev
+      headless: chromium.headless === false ? false : true,
+    });
+
+    const page = await browser.newPage();
+    await page.setContent(payslipHtml, { waitUntil: 'networkidle0' });
+    const pdfBuffer = await page.pdf({ format: 'A4', printBackground: true });
+    await browser.close();
+
+    // Collect additional emails
+    const additionalEmails: string[] = [];
+
+    try {
+      const admins = await this.userRepository.createQueryBuilder('user')
+        .leftJoinAndSelect('user.roles', 'role')
+        .where('user.companyId = :companyId', { companyId: payroll.companyId })
+        .andWhere('LOWER(role.name) IN (:...roleNames)', { roleNames: ['admin', 'super admin', 'superadmin'] })
+        .getMany();
+
+      admins.forEach(admin => {
+        if (admin.email) additionalEmails.push(admin.email);
+      });
+    } catch (err) {
+      console.error('[FinanceService] Failed to fetch admins for payroll sending', err);
+    }
+
+    try {
+      const company = await this.companyRepository.findOne({ where: { id: payroll.companyId } });
+      if (company && company.payrollAlertEmails) {
+        const policyEmails = company.payrollAlertEmails.split(',').map(e => e.trim()).filter(Boolean);
+        additionalEmails.push(...policyEmails);
+      }
+    } catch (err) {
+      console.error('[FinanceService] Failed to fetch company policy emails for payroll sending', err);
+    }
+
+    const uniqueAdditionalEmails = [...new Set(additionalEmails)];
+
+    const recipientUserIds = [emp.userId];
+    if (uniqueAdditionalEmails.length > 0) {
+      try {
+        const extraUsers = await this.userRepository.find({
+          where: { email: In(uniqueAdditionalEmails) },
+          select: ['id'],
+        });
+        extraUsers.forEach(u => {
+          if (u.id && !recipientUserIds.includes(u.id)) {
+            recipientUserIds.push(u.id);
+          }
+        });
+      } catch (err) {
+        console.error('[FinanceService] Failed to fetch user IDs for FCM fallback', err);
+      }
+    }
+
+    // Send email to Employee
+    const empName = user?.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : 'Employee';
+    
+    if (user && user.email) {
+      const notifResult = await this.notificationsService.send({
+        title: 'Difmo Pvt Ltd: Salary Slip Generated',
+        message: 'Please find attached your salary slip.',
+        type: 'both',
+        recipientFilter: 'employees',
+        recipientIds: [emp.userId],
+        recipientEmails: [],
+        companyId: payroll.companyId,
+        attachments: [
+          {
+            filename: `${empName.replace(/ /g, '_')}_Salary_slip_${payroll.month}-${payroll.year}.pdf`,
+            content: Buffer.from(pdfBuffer),
+            contentType: 'application/pdf',
+          }
+        ],
+        metadata: {
+          type: 'PAYROLL_FINALIZED',
+          month: payroll.month,
+          year: payroll.year,
+          netSalary: payroll.netSalary,
+          useCustomHtml: true, // Use the provided HTML instead of default layout
+          customHtml: emailBodyHtml,
+        }
+      });
+
+      // If email failed to send to employee, throw error.
+      if (notifResult && notifResult.successCount === 0 && notifResult.failureCount > 0) {
+        throw new Error(`Failed to send email to employee. Please check your email configuration.`);
+      }
+    } else {
+      throw new Error("Employee does not have a valid email address attached.");
+    }
+
+    // Send separate email to Admins / Additional Emails
+    const extraIds = recipientUserIds.filter(id => id !== emp.userId);
+    if (extraIds.length > 0 || uniqueAdditionalEmails.length > 0) {
+      await this.notificationsService.send({
+        title: `Difmo Pvt Ltd: Salary Slip for ${empName}`,
+        message: `The salary slip for ${empName} (${payroll.month}/${payroll.year}) has been generated. Please find it attached.`,
+        type: 'both',
+        recipientFilter: 'employees',
+        recipientIds: extraIds,
+        recipientEmails: uniqueAdditionalEmails,
+        companyId: payroll.companyId,
+        attachments: [
+          {
+            filename: `${empName.replace(/ /g, '_')}_Salary_slip_${payroll.month}-${payroll.year}.pdf`,
+            content: Buffer.from(pdfBuffer),
+            contentType: 'application/pdf',
+          }
+        ],
+        metadata: {
+          type: 'PAYROLL_FINALIZED_ADMIN',
+          month: payroll.month,
+          year: payroll.year,
+          netSalary: payroll.netSalary,
+          useCustomHtml: true, 
+          customHtml: emailBodyHtml,
+        }
+      });
+    }
+
+    payroll.status = 'sent';
+    return this.payrollRepository.save(payroll);
   }
 
   async generatePayrollSingle(attendanceId: string) {
@@ -530,7 +671,7 @@ export class FinanceService {
     if (!attendance.employee) throw new Error('Employee not found for this attendance');
 
     const companyId = attendance.employee.companyId;
-    const basicSalary = this.parseSalary(attendance.employee.salary) || 20000;
+    const basicSalary = this.parseSalary(attendance.employee.salary) || 0;
 
     console.log(`[FinanceService] Generating single payroll for employee ${attendance.employeeId}. Basic Salary: ${basicSalary}`);
 
@@ -813,7 +954,6 @@ export class FinanceService {
     const payroll = await this.payrollRepository.findOne({ where: { id } });
     if (!payroll) throw new NotFoundException('Payroll not found');
 
-    // Recalculate net salary if components changed
     if (data.basicSalary !== undefined || data.allowances !== undefined || data.deductions !== undefined) {
       const basic = Number(data.basicSalary !== undefined ? data.basicSalary : payroll.basicSalary);
       const allowances = Number(data.allowances !== undefined ? data.allowances : (payroll.allowances || 0));
@@ -823,6 +963,60 @@ export class FinanceService {
 
     Object.assign(payroll, data);
     return this.payrollRepository.save(payroll);
+  }
+
+  async saveCustomHtml(id: string, customPayslipHtml: string, customEmailBodyHtml: string): Promise<Payroll> {
+    const payroll = await this.payrollRepository.findOne({ where: { id } });
+    if (!payroll) throw new NotFoundException('Payroll not found');
+    payroll.customPayslipHtml = customPayslipHtml;
+    payroll.customEmailBodyHtml = customEmailBodyHtml;
+    this.syncPayrollValuesFromHtml(payroll, customPayslipHtml);
+    return this.payrollRepository.save(payroll);
+  }
+
+  private syncPayrollValuesFromHtml(payroll: Payroll, payslipHtml: string) {
+    if (!payslipHtml) return;
+    const extractInputValue = (html: string, id: string): string | null => {
+      const regex1 = new RegExp(`<input[^>]*id\\s*=\\s*["']${id}["'][^>]*value\\s*=\\s*["']([^"']*)["']`, 'i');
+      const match1 = html.match(regex1);
+      if (match1) return match1[1];
+
+      const regex2 = new RegExp(`<input[^>]*value\\s*=\\s*["']([^"']*)["'][^>]*id\\s*=\\s*["']${id}["']`, 'i');
+      const match2 = html.match(regex2);
+      if (match2) return match2[1];
+
+      return null;
+    };
+
+    const grossSalaryStr = extractInputValue(payslipHtml, 'grossSalary');
+    const allowancesStr = extractInputValue(payslipHtml, 'allowances');
+    const deductionsStr = extractInputValue(payslipHtml, 'deductions');
+    const netPayableStr = extractInputValue(payslipHtml, 'netPayable');
+
+    if (grossSalaryStr !== null) {
+      const val = parseFloat(grossSalaryStr);
+      if (!isNaN(val)) {
+        payroll.basicSalary = val;
+      }
+    }
+    if (allowancesStr !== null) {
+      const val = parseFloat(allowancesStr);
+      if (!isNaN(val)) {
+        payroll.allowances = val;
+      }
+    }
+    if (deductionsStr !== null) {
+      const val = parseFloat(deductionsStr);
+      if (!isNaN(val)) {
+        payroll.deductions = val;
+      }
+    }
+    if (netPayableStr !== null) {
+      const val = parseFloat(netPayableStr);
+      if (!isNaN(val)) {
+        payroll.netSalary = val;
+      }
+    }
   }
 
   async deletePayroll(id: string): Promise<{ message: string }> {
@@ -852,15 +1046,15 @@ export class FinanceService {
     const pdfBuffer = await this.generatePayrollSlip(id);
 
     await this.notificationsService.send({
-      title: 'Difmo Pvt Ltd: Payroll Slip Generated',
-      message: `Your payroll for ${payroll.month}/${payroll.year} has been generated. Please find the attached payslip for your records.`,
+      title: 'Difmo Pvt Ltd: Salary Slip Generated',
+      message: `Your salary slip for ${payroll.month}/${payroll.year} has been generated. Please find the attached payslip for your records.`,
       type: 'email',
       recipientFilter: 'employees',
       recipientIds: [payroll.employee.userId],
       companyId: payroll.companyId,
       attachments: [
         {
-          filename: `Payslip_${payroll.month}_${payroll.year}.pdf`,
+          filename: `${(payroll.employee?.user?.firstName || 'Employee').replace(/ /g, '_')}_Salary_slip_${payroll.month}-${payroll.year}.pdf`,
           content: pdfBuffer,
           contentType: 'application/pdf'
         }
@@ -874,6 +1068,9 @@ export class FinanceService {
         customHtml: customHtml || undefined
       }
     });
+
+    payroll.status = 'sent';
+    await this.payrollRepository.save(payroll);
 
     return { message: 'Email sent successfully with attachment' };
   }

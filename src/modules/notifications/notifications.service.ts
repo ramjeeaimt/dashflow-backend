@@ -176,7 +176,7 @@ export class NotificationsService implements OnModuleInit {
 
     private async resolveRecipients(dto: SendNotificationDto): Promise<{ emails: string[]; userIds: string[] }> {
         const emails: string[] = [...(dto.recipientEmails || [])];
-        const userIds: string[] = [];
+        const userIds: string[] = [...(dto.recipientIds || [])];
 
         if (dto.recipientFilter === 'all') {
             const employees = await this.employeeRepo.find({

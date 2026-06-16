@@ -29,6 +29,15 @@ export class Company {
   @Column({ nullable: true })
   logo: string; // URL
 
+  @Column({ nullable: true })
+  payslipSignature: string; // URL
+
+  @Column('text', { nullable: true })
+  payslipEmailTemplate: string; // HTML string (Attachment)
+
+  @Column('text', { nullable: true })
+  salaryEmailBodyTemplate: string; // HTML string (Email Body)
+
   @Column({ unique: true })
   email: string;
 
@@ -90,6 +99,10 @@ export class Company {
   @Column({ type: 'int', default: 4 })
   halfDayMinHours: number; // hours worked that constitutes a half-day
 
+  @Column({ type: 'int', default: 12 })
+  casualLeavesPerYear: number; // number of casual leaves allowed per year
+
+
   @Column({ type: 'int', default: 50 })
   halfDayPayPercent: number; // pay % for a half-day (affects payroll)
 
@@ -104,6 +117,19 @@ export class Company {
 
   @Column({ nullable: true })
   activeEmailTemplateId: string; // The selected global email template
+
+  // ── Finance & Payroll Policies ─────────────────────────────────────
+  @Column({ type: 'int', default: 0 })
+  allowanceAmount: number;
+
+  @Column({ type: 'enum', enum: ['fixed', 'variable'], default: 'fixed' })
+  overtimePolicy: string;
+
+  @Column({ type: 'int', default: 0 })
+  overtimeRatePerHour: number;
+
+  @Column({ type: 'float', default: 100.0 })
+  overtimeMultiplier: number;
 
   // ── Reward System ──────────────────────────────────────────────────
   @Column({ default: false })

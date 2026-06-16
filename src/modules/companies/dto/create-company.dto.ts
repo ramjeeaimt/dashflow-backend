@@ -7,6 +7,7 @@ import {
   IsInt,
   Min,
   Max,
+  IsArray,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -17,6 +18,22 @@ export class CreateCompanyDto {
   @IsString()
   @IsOptional()
   website?: string;
+
+  @IsOptional()
+  @IsString()
+  logo?: string;
+
+  @IsOptional()
+  @IsString()
+  payslipSignature?: string;
+
+  @IsOptional()
+  @IsString()
+  payslipEmailTemplate?: string;
+
+  @IsOptional()
+  @IsString()
+  salaryEmailBodyTemplate?: string;
 
   @IsString()
   @IsOptional()
@@ -55,6 +72,11 @@ export class CreateCompanyDto {
 
   // ── Attendance Policy ──────────────────────────────────────────────
   @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  workingDays?: string[];
+
+  @IsOptional()
   @IsInt()
   @Min(0)
   @Max(120)
@@ -81,6 +103,13 @@ export class CreateCompanyDto {
   @Max(12)
   @Type(() => Number)
   halfDayMinHours?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(365)
+  @Type(() => Number)
+  casualLeavesPerYear?: number;
 
   @IsOptional()
   @IsInt()
@@ -119,4 +148,23 @@ export class CreateCompanyDto {
   @IsOptional()
   @IsString()
   rewardDescription?: string;
+
+  // ── Finance & Payroll Policies ─────────────────────────────────────
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  allowanceAmount?: number;
+
+  @IsOptional()
+  @IsString()
+  overtimePolicy?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  overtimeRatePerHour?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  overtimeMultiplier?: number;
 }

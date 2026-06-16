@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Put,
   Patch,
   Delete,
   Body,
@@ -110,9 +111,35 @@ export class FinanceController {
     return this.financeService.generatePayroll(body);
   }
 
+  @Post('bulk-generate')
+  @CheckAbilities({ action: Action.Create, subject: 'payroll' })
+  bulkGeneratePayroll(
+    @Request() req: any,
+    @Body() body: { month: number; year: number; companyId?: string; employeeId?: string }
+  ) {
+    const user = req.user;
+    const isSuperAdmin = ['admin@difmo.com', 'info@difmo.com', 'hello@system.com'].includes(user.email);
+    const finalCompanyId = (!isSuperAdmin && user.company?.id) ? user.company.id : body.companyId;
+
+    if (!finalCompanyId) {
+      throw new Error('Company ID is required for bulk generation');
+    }
+
+    return this.financeService.generateMonthlyPayroll(body.month, body.year, finalCompanyId, body.employeeId);
+  }
+
   @Post('generate-single')
   generateSingle(@Body() body: { attendanceId: string }) {
     return this.financeService.generatePayrollSingle(body.attendanceId);
+  }
+
+  @Put('payroll/:id/custom-html')
+  @CheckAbilities({ action: Action.Update, subject: 'payroll' })
+  saveCustomHtml(
+    @Param('id') id: string,
+    @Body() body: { customPayslipHtml: string; customEmailBodyHtml: string }
+  ) {
+    return this.financeService.saveCustomHtml(id, body.customPayslipHtml, body.customEmailBodyHtml);
   }
 
   @Get('summary')
@@ -136,13 +163,13 @@ export class FinanceController {
     return this.financeService.updatePayroll(id, data);
   }
 
-  @Post('payroll/:id/send-email')
+  @Post('payroll/:id/send')
   @CheckAbilities({ action: Action.Update, subject: 'payroll' })
-  sendPayrollEmail(
+  finalizeAndSendPayroll(
     @Param('id') id: string,
-    @Body() body?: { customHtml?: string; notes?: string }
+    @Body() body: { payslipHtml: string; emailBodyHtml: string }
   ) {
-    return this.financeService.sendPayrollEmail(id, body?.customHtml, body?.notes);
+    return this.financeService.finalizeAndSendPayroll(id, body.payslipHtml, body.emailBodyHtml);
   }
 
   @Delete('payroll/:id')
