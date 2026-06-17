@@ -83,6 +83,12 @@ export class FinanceController {
     return this.financeService.findAllExpenses(finalCompanyId, currency);
   }
 
+  @Patch('expenses/:id')
+  @CheckAbilities({ action: Action.Update, subject: 'expense' })
+  updateExpense(@Param('id') id: string, @Body() data: any) {
+    return this.financeService.updateExpense(id, data);
+  }
+
   @Delete('expenses/:id')
   @CheckAbilities({ action: Action.Delete, subject: 'expense' })
   deleteExpense(@Param('id') id: string) {

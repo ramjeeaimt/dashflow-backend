@@ -4,6 +4,7 @@ import { Repository, LessThanOrEqual, MoreThanOrEqual } from 'typeorm';
 import { Leave } from './leave.entity';
 import { CreateLeaveDto, UpdateLeaveStatusDto } from './dto/create-leave.dto';
 import { Employee } from '../employees/employee.entity';
+import { Attendance } from '../attendance/attendance.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { MailService } from '../mail/mail.service';
 
@@ -15,6 +16,8 @@ export class LeavesService {
 
     @InjectRepository(Employee)
     private employeeRepository: Repository<Employee>,
+    @InjectRepository(Attendance)
+    private attendanceRepository: Repository<Attendance>,
     private readonly notificationsService: NotificationsService,
     private readonly mailService: MailService,
   ) { }
@@ -69,7 +72,7 @@ export class LeavesService {
       await this.notificationsService.send({
         title: 'Difmo Pvt Ltd: New Leave Request',
         message: `${employee.user?.firstName || 'An employee'} has applied for leave from ${createLeaveDto.startDate} to ${createLeaveDto.endDate}.`,
-        type: 'both',
+        type: 'push',
         recipientFilter: 'admin',
         companyId: employee.companyId,
         metadata: {
@@ -122,7 +125,7 @@ export class LeavesService {
           status: 'REQUESTED',
           startDate: createLeaveDto.startDate,
           endDate: createLeaveDto.endDate,
-          comment: createLeaveDto.reason || 'Not specified',
+          userReason: createLeaveDto.reason || 'Not specified',
           companyId: employee.companyId,
         }).catch(err => console.error(`[LeavesService] Failed to send leave alert to ${adminEmail}:`, err));
       });
@@ -192,12 +195,68 @@ export class LeavesService {
 
     const updatedLeave = await this.leavesRepository.save(leave);
 
+    // Auto-generate Attendance records if leave is APPROVED
+    if (updatedLeave.status === 'APPROVED') {
+      try {
+        const company = updatedLeave.employee?.company;
+        let workingDays = company?.workingDays;
+        
+        // Parse simple-json if it comes as a string (TypeORM simple-json sometimes needs it, but usually handles it. Just in case)
+        if (typeof workingDays === 'string') {
+          try { workingDays = JSON.parse(workingDays); } catch(e) {}
+        }
+        
+        if (!workingDays || !Array.isArray(workingDays) || workingDays.length === 0) {
+          workingDays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
+        }
+        const workingDaysLower = workingDays.map(d => typeof d === 'string' ? d.toLowerCase() : '');
+        const daysMap = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+        
+        const start = new Date(updatedLeave.startDate);
+        const end = new Date(updatedLeave.endDate);
+        const datesToLog: string[] = [];
+
+        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+          const dayName = daysMap[d.getDay()];
+          if (workingDaysLower.includes(dayName)) {
+            // Adjust to local ISO string (to avoid timezone shifting issues)
+            const year = d.getFullYear();
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            datesToLog.push(`${year}-${month}-${day}`);
+          }
+        }
+
+        for (const dateStr of datesToLog) {
+          const existing = await this.attendanceRepository.findOne({
+            where: { employeeId: updatedLeave.employeeId, date: dateStr as any }
+          });
+
+          if (!existing) {
+            const att = this.attendanceRepository.create({
+              employeeId: updatedLeave.employeeId,
+              date: dateStr as any,
+              status: 'leave',
+              notes: 'Auto-generated from approved leave request'
+            });
+            await this.attendanceRepository.save(att);
+          } else if (existing.status !== 'present') {
+            existing.status = 'leave';
+            existing.notes = existing.notes ? `${existing.notes} | Auto-approved leave` : 'Auto-approved leave';
+            await this.attendanceRepository.save(existing);
+          }
+        }
+      } catch (err) {
+        console.error('[LeavesService] Failed to auto-generate attendance for approved leave:', err);
+      }
+    }
+
     // 1. Notification to Employee
     try {
       await this.notificationsService.send({
         title: `Difmo Pvt Ltd: Leave ${updatedLeave.status}`,
         message: `Your leave application has been ${updatedLeave.status.toLowerCase()}.${updatedLeave.adminComment ? ` Admin Note: ${updatedLeave.adminComment}` : ''}`,
-        type: 'both',
+        type: 'push',
         recipientFilter: 'employees',
         recipientIds: [updatedLeave.employee?.userId].filter(Boolean) as string[],
         companyId: updatedLeave.employee?.companyId || '',
@@ -217,7 +276,7 @@ export class LeavesService {
       await this.notificationsService.send({
         title: `Difmo Pvt Ltd: Leave Request ${updatedLeave.status.charAt(0) + updatedLeave.status.slice(1).toLowerCase()}`,
         message: `Leave request for ${updatedLeave.employee?.user?.firstName || 'Employee'} has been ${updatedLeave.status.toLowerCase()}.`,
-        type: 'both',
+        type: 'push',
         recipientFilter: 'admin',
         companyId: updatedLeave.employee?.companyId || '',
         metadata: {
@@ -241,7 +300,9 @@ export class LeavesService {
           status: updatedLeave.status,
           startDate: updatedLeave.startDate,
           endDate: updatedLeave.endDate,
-          comment: updatedLeave.adminComment,
+          userReason: updatedLeave.reason,
+          adminComment: updatedLeave.adminComment,
+          actionUrl: 'https://dashflow-frontend.vercel.app/employee/leaves',
           companyId: updatedLeave.employee?.companyId,
         });
       }
@@ -286,7 +347,8 @@ export class LeavesService {
           status: updatedLeave.status,
           startDate: updatedLeave.startDate,
           endDate: updatedLeave.endDate,
-          comment: updatedLeave.adminComment,
+          userReason: updatedLeave.reason,
+          adminComment: updatedLeave.adminComment,
           companyId: updatedLeave.employee?.companyId,
         }).catch(err => console.error(`[LeavesService] Failed to send leave status update to admin ${adminEmail}:`, err));
       });

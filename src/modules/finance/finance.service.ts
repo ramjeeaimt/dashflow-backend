@@ -58,7 +58,7 @@ export class FinanceService {
     const toRate = this.rates[to.toUpperCase()] || 1;
     // Convert to USD first, then to target
     const inUsd = amount / fromRate;
-    return inUsd * toRate;
+    return parseFloat((inUsd * toRate).toFixed(2));
   }
 
   /**
@@ -267,6 +267,49 @@ export class FinanceService {
     });
   }
 
+  // --- Notifications Helper ---
+  private async notifyFinanceActivity(companyId: string, title: string, message: string, type: 'both' | 'push', expenseData: any) {
+    try {
+      const company = await this.companyRepository.findOne({ where: { id: companyId } });
+      const emails = new Set<string>();
+      const userIds = new Set<string>();
+
+      // Get Custom Emails from policy
+      if (company && company.payrollAlertEmails) {
+        const policyEmails = company.payrollAlertEmails.split(',').map(e => e.trim().toLowerCase()).filter(Boolean);
+        policyEmails.forEach(e => emails.add(e));
+
+        if (policyEmails.length > 0) {
+          const policyUsers = await this.userRepository.createQueryBuilder('user')
+            .where('LOWER(user.email) IN (:...emails)', { emails: policyEmails })
+            .getMany();
+          policyUsers.forEach(u => userIds.add(u.id));
+        }
+      }
+
+      // Send Notification
+      // We use 'admin' filter to automatically target all admins.
+      // Custom emails/userIds passed will simply be appended to the list by NotificationsService.
+      await this.notificationsService.send({
+        title,
+        message,
+        type,
+        recipientFilter: 'admin',
+        recipientEmails: Array.from(emails),
+        recipientIds: Array.from(userIds),
+        companyId,
+        metadata: {
+          type: 'FINANCE_UPDATE',
+          expenseId: expenseData?.id,
+          amount: expenseData?.amount,
+          title: expenseData?.title,
+        }
+      });
+    } catch (err) {
+      console.error('[FinanceService] Failed to notify finance activity:', err.message);
+    }
+  }
+
   // Expenses
   async createExpense(data: Partial<Expense>, userId: string): Promise<Expense> {
     if (!data.companyId) {
@@ -291,8 +334,27 @@ export class FinanceService {
         data.currency = 'INR';
       }
 
+      if (data.amount !== undefined) {
+        data.amount = parseFloat(Number(data.amount).toFixed(2));
+      }
+
       const newExpense = this.expenseRepository.create(data);
-      return await this.expenseRepository.save(newExpense);
+      const saved = await this.expenseRepository.save(newExpense);
+
+      // Notify (Email + FCM)
+      const isCredit = saved.type === 'credit' || saved.type === 'income';
+      const typeStr = isCredit ? 'Income' : 'Expense';
+      const statusDisplay = saved.status === 'pending' ? 'Requested' : 'Approved';
+
+      this.notifyFinanceActivity(
+        saved.companyId,
+        `Financial Entry ${statusDisplay}: ${saved.title}`,
+        `A new ${typeStr.toLowerCase()} of ${saved.currency} ${saved.amount} has been ${statusDisplay.toLowerCase()}.`,
+        'both',
+        saved
+      );
+
+      return saved;
     } catch (error) {
       console.error('ERROR: Failed to save expense:', error);
       throw error;
@@ -401,9 +463,10 @@ export class FinanceService {
       const casualLeavesPerYear = Number(emp.company?.casualLeavesPerYear) || 12;
       const freeLeaves = casualLeavesPerYear / 12;
 
-      // Leaves deduction logic: first N leaves free
-      const extraLeaves = leaveDays > freeLeaves ? leaveDays - freeLeaves : 0;
-      const leaveDeduction = Number(extraLeaves * perDay + absentDays * perDay) || 0;
+      // Leaves deduction logic: group Absent and Leave together to consume Free CL
+      const totalMissedDays = leaveDays + absentDays;
+      const unpaidMissedDays = Math.max(0, totalMissedDays - freeLeaves);
+      const leaveDeduction = Number(unpaidMissedDays * perDay) || 0;
 
       // Half-day deduction uses company-configured percentage
       const halfDeduction = Number(halfDays * (perDay * (halfPercent / 100))) || 0;
@@ -455,8 +518,8 @@ export class FinanceService {
         year,
         totalWorkingDays: exactWorkingDaysInMonth,
         workDays: presentDays + halfDays,
-        paidLeaves: Math.min(leaveDays, freeLeaves),
-        unpaidLeaves: extraLeaves,
+        paidLeaves: Math.min(totalMissedDays, freeLeaves),
+        unpaidLeaves: unpaidMissedDays,
         workingHoursPerDay: Math.round(defaultWorkingHours),
         overtimeRate: Math.round(dynamicOvertimeRate),
         freeLeaves: Math.round(freeLeaves),
@@ -593,7 +656,7 @@ export class FinanceService {
 
     // Send email to Employee
     const empName = user?.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : 'Employee';
-    
+
     if (user && user.email) {
       const notifResult = await this.notificationsService.send({
         title: 'Difmo Pvt Ltd: Salary Slip Generated',
@@ -651,14 +714,28 @@ export class FinanceService {
           month: payroll.month,
           year: payroll.year,
           netSalary: payroll.netSalary,
-          useCustomHtml: true, 
+          useCustomHtml: true,
           customHtml: emailBodyHtml,
         }
       });
     }
 
     payroll.status = 'sent';
-    return this.payrollRepository.save(payroll);
+    const saved = await this.payrollRepository.save(payroll);
+
+    // Trigger Finance Notification (Appears in Finance Dashboard)
+    const statusDisplay = saved.financeStatus === 'pending' ? 'Requested' : 'Approved';
+    const netSalary = saved.netSalary || 0;
+
+    this.notifyFinanceActivity(
+      saved.companyId,
+      `Financial Entry ${statusDisplay}: Payroll — ${empName}`,
+      `A new payroll entry for ${empName} (${saved.month}/${saved.year}) has been added to the finance dashboard. Amount is INR ${netSalary}.`,
+      'both',
+      { ...saved, click_action: '/dashboard/finance' }
+    );
+
+    return saved;
   }
 
   async generatePayrollSingle(attendanceId: string) {
@@ -884,6 +961,33 @@ export class FinanceService {
     });
   }
 
+  async updateExpense(id: string, updateData: Partial<Expense>): Promise<Expense> {
+    const expense = await this.expenseRepository.findOne({ where: { id } });
+    if (!expense) throw new NotFoundException('Expense not found');
+
+    if (updateData.amount !== undefined) {
+      updateData.amount = parseFloat(Number(updateData.amount).toFixed(2));
+    }
+
+    Object.assign(expense, updateData);
+    const saved = await this.expenseRepository.save(expense);
+
+    // Notify (Email + FCM)
+    const isCredit = saved.type === 'credit' || saved.type === 'income';
+    const typeStr = isCredit ? 'Income' : 'Expense';
+    const statusDisplay = saved.status === 'pending' ? 'Requested' : 'Approved';
+
+    this.notifyFinanceActivity(
+      saved.companyId,
+      `Financial Entry ${statusDisplay}: ${saved.title}`,
+      `The ${typeStr.toLowerCase()} entry "${saved.title}" has been updated to ${statusDisplay.toLowerCase()}. Amount is ${saved.currency} ${saved.amount}.`,
+      'both',
+      saved
+    );
+
+    return saved;
+  }
+
   async deleteExpense(id: string): Promise<{ message: string }> {
     const expense = await this.expenseRepository.findOne({ where: { id } });
     if (!expense) throw new NotFoundException('Expense not found');
@@ -897,7 +1001,7 @@ export class FinanceService {
 
     const [expensesRaw, payrollsRaw] = await Promise.all([
       this.expenseRepository.find({ where }),
-      this.payrollRepository.find({ where: { ...where, status: 'paid' } }),
+      this.payrollRepository.find({ where: { ...where, status: In(['paid', 'sent']) } }),
     ]);
 
     let expenses = expensesRaw;
@@ -951,7 +1055,7 @@ export class FinanceService {
   }
 
   async updatePayroll(id: string, data: Partial<Payroll>): Promise<Payroll> {
-    const payroll = await this.payrollRepository.findOne({ where: { id } });
+    const payroll = await this.payrollRepository.findOne({ where: { id }, relations: ['employee', 'employee.user'] });
     if (!payroll) throw new NotFoundException('Payroll not found');
 
     if (data.basicSalary !== undefined || data.allowances !== undefined || data.deductions !== undefined) {
@@ -962,7 +1066,24 @@ export class FinanceService {
     }
 
     Object.assign(payroll, data);
-    return this.payrollRepository.save(payroll);
+    const saved = await this.payrollRepository.save(payroll);
+
+    // Notification Logic for Finance Team
+    if (data.financeStatus) {
+      const statusDisplay = saved.financeStatus === 'pending' ? 'Requested' : 'Approved';
+      const empName = saved.employee?.user ? `${saved.employee.user.firstName} ${saved.employee.user.lastName || ''}`.trim() : 'Employee';
+      const netSalary = saved.netSalary || 0;
+
+      this.notifyFinanceActivity(
+        saved.companyId,
+        `Financial Entry ${statusDisplay}: Payroll — ${empName}`,
+        `The payroll entry for ${empName} (${saved.month}/${saved.year}) has been updated to ${statusDisplay.toLowerCase()}. Amount is INR ${netSalary}.`,
+        'both',
+        { ...saved, click_action: '/dashboard/finance' }
+      );
+    }
+
+    return saved;
   }
 
   async saveCustomHtml(id: string, customPayslipHtml: string, customEmailBodyHtml: string): Promise<Payroll> {

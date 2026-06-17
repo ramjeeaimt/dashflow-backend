@@ -92,6 +92,9 @@ export class Payroll {
   @Column({ default: 'draft' })
   status: string;
 
+  @Column({ default: 'pending' })
+  financeStatus: string;
+
   @Column({ type: 'text', nullable: true })
   notes: string;
 

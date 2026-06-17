@@ -7,8 +7,10 @@ import { Leave } from './leave.entity';
 import { Employee } from '../employees/employee.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
 
+import { Attendance } from '../attendance/attendance.entity';
+
 @Module({
-  imports: [TypeOrmModule.forFeature([Leave,Employee]),NotificationsModule],
+  imports: [TypeOrmModule.forFeature([Leave, Employee, Attendance]), NotificationsModule],
   controllers: [LeavesController],
   providers: [LeavesService, EmailService],
   exports: [LeavesService, EmailService],

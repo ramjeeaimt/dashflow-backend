@@ -211,7 +211,7 @@ export class NotificationsService implements OnModuleInit {
             const admins = await this.userRepo.createQueryBuilder('user')
                 .leftJoinAndSelect('user.roles', 'role')
                 .where('user.companyId = :companyId', { companyId: dto.companyId })
-                .andWhere('LOWER(role.name) IN (:...roleNames)', { roleNames: ['admin', 'super admin', 'superadmin'] })
+                .andWhere('LOWER(role.name) IN (:...roleNames)', { roleNames: ['admin', 'super admin', 'superadmin', 'administrator'] })
                 .getMany();
 
             this.logger.log(`Found ${admins.length} admins to notify for company ${dto.companyId}`);

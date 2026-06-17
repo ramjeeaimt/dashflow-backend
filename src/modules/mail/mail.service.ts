@@ -52,10 +52,25 @@ export class MailService {
   // Leave status email
   async sendLeaveStatusEmail(
     to: string,
-    data: { employeeName: string; status: string; startDate: string; endDate: string; comment?: string; companyId?: string },
+    data: { 
+      employeeName: string; 
+      status: string; 
+      startDate: string; 
+      endDate: string; 
+      userReason?: string; 
+      adminComment?: string; 
+      actionUrl?: string; 
+      companyId?: string 
+    },
   ) {
     const statusUpper = data.status.toUpperCase();
-    const subject = `Leave Application ${statusUpper}`;
+    
+    // Create distinct subjects so email clients don't merge/hide them if Employee = Admin
+    const isForEmployee = !!data.actionUrl;
+    const subject = isForEmployee 
+      ? `Your Leave Application is ${statusUpper}` 
+      : `Leave Application ${statusUpper} - ${data.employeeName}`;
+
     let color = '#f59e0b';
     let actionText = `A new leave request has been submitted by <strong>${data.employeeName}</strong> and requires your review.`;
     if (statusUpper === 'APPROVED') {
@@ -65,6 +80,12 @@ export class MailService {
       color = '#ef4444';
       actionText = `The leave request for <strong>${data.employeeName}</strong> has been rejected.`;
     }
+    const buttonHtml = data.actionUrl ? `
+      <div style="margin-top: 24px;">
+        <a href="${data.actionUrl}" style="background-color: #0f172a; color: #ffffff; padding: 10px 20px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">View Leave History</a>
+      </div>
+    ` : '';
+
     const defaultMsgHtml = `
       <div style="background: #f8fafc; border-left: 4px solid ${color}; padding: 24px; margin-bottom: 32px; border-radius: 4px;">
         <h2 style="color: ${color}; font-size: 20px; font-weight: 800; margin: 0 0 12px 0;">Leave ${statusUpper}</h2>
@@ -73,8 +94,10 @@ export class MailService {
           <p style="margin: 4px 0;"><strong>Employee:</strong> ${data.employeeName}</p>
           <p style="margin: 4px 0;"><strong>Start Date:</strong> ${data.startDate}</p>
           <p style="margin: 4px 0;"><strong>End Date:</strong> ${data.endDate}</p>
-          ${data.comment ? `<p style="margin: 8px 0 0 0; color: #334155;"><strong>Note:</strong> ${data.comment}</p>` : ''}
+          ${data.userReason ? `<p style="margin: 8px 0 0 0; color: #334155;"><strong>Reason:</strong> ${data.userReason}</p>` : ''}
+          ${data.adminComment ? `<p style="margin: 8px 0 0 0; color: #334155;"><strong>Admin Note:</strong> ${data.adminComment}</p>` : ''}
         </div>
+        ${buttonHtml}
       </div>
     `;
     const customHtml = await this.getCustomHtml(data.companyId, data, defaultMsgHtml);

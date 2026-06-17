@@ -977,6 +977,17 @@ paths:
         "200":
           description: ""
   /api/finance/expenses/{id}:
+    patch:
+      operationId: FinanceController_updateExpense
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
     delete:
       operationId: FinanceController_deleteExpense
       parameters:
