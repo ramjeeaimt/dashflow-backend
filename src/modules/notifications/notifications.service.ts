@@ -168,7 +168,7 @@ export class NotificationsService implements OnModuleInit {
     // ─── Email Templates ─────────────────────────────────────────────────────────
 
     private getEmailTemplate(type: string, title: string, message: string, metadata: any = {}): string {
-        const appUrl = this.configService.get('APP_URL') || 'http://localhost:3000';
+        const appUrl = 'https://dashflow-frontend.vercel.app';
         const content = getSpecializedContent(type, title, message, metadata, appUrl);
         return getEmailLayout(title, content);
     }

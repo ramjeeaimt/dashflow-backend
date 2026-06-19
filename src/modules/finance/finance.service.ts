@@ -303,6 +303,17 @@ export class FinanceService {
           expenseId: expenseData?.id,
           amount: expenseData?.amount,
           title: expenseData?.title,
+          entryType: expenseData?.entryType,
+          currency: expenseData?.currency,
+          financeStatus: expenseData?.status,
+          category: expenseData?.category,
+          entryDate: expenseData?.date,
+          month: expenseData?.month,
+          year: expenseData?.year,
+          employeeName: expenseData?.employeeName,
+          financeType: expenseData?.financeType,
+          description: expenseData?.description,
+          click_action: '/finance',
         }
       });
     } catch (err) {
@@ -346,12 +357,26 @@ export class FinanceService {
       const typeStr = isCredit ? 'Income' : 'Expense';
       const statusDisplay = saved.status === 'pending' ? 'Requested' : 'Approved';
 
+      const employeeName = employee ? `${employee.user?.firstName || ''} ${employee.user?.lastName || ''}`.trim() : undefined;
+
       this.notifyFinanceActivity(
         saved.companyId,
         `Financial Entry ${statusDisplay}: ${saved.title}`,
         `A new ${typeStr.toLowerCase()} of ${saved.currency} ${saved.amount} has been ${statusDisplay.toLowerCase()}.`,
         'both',
-        saved
+        {
+          id: saved.id,
+          entryType: 'Expense',
+          title: saved.title,
+          amount: saved.amount,
+          currency: saved.currency,
+          financeType: saved.type,
+          category: saved.category,
+          status: saved.status,
+          date: saved.date,
+          description: saved.description,
+          employeeName: employeeName
+        }
       );
 
       return saved;
@@ -605,7 +630,11 @@ export class FinanceService {
 
     const page = await browser.newPage();
     await page.setContent(payslipHtml, { waitUntil: 'networkidle0' });
-    const pdfBuffer = await page.pdf({ format: 'A4', printBackground: true });
+    const pdfBuffer = await page.pdf({ 
+      format: 'A4', 
+      printBackground: true,
+      margin: { top: '50px', bottom: '30px', left: '20px', right: '20px' }
+    });
     await browser.close();
 
     // Collect additional emails
@@ -732,7 +761,18 @@ export class FinanceService {
       `Financial Entry ${statusDisplay}: Payroll — ${empName}`,
       `A new payroll entry for ${empName} (${saved.month}/${saved.year}) has been added to the finance dashboard. Amount is INR ${netSalary}.`,
       'both',
-      { ...saved, click_action: '/dashboard/finance' }
+      {
+        id: saved.id,
+        entryType: 'Payroll',
+        title: `Payroll for ${empName}`,
+        amount: netSalary,
+        currency: 'INR',
+        month: saved.month,
+        year: saved.year,
+        status: saved.financeStatus,
+        description: saved.notes,
+        employeeName: empName
+      }
     );
 
     return saved;
@@ -962,7 +1002,7 @@ export class FinanceService {
   }
 
   async updateExpense(id: string, updateData: Partial<Expense>): Promise<Expense> {
-    const expense = await this.expenseRepository.findOne({ where: { id } });
+    const expense = await this.expenseRepository.findOne({ where: { id }, relations: ['employee', 'employee.user'] });
     if (!expense) throw new NotFoundException('Expense not found');
 
     if (updateData.amount !== undefined) {
@@ -977,12 +1017,26 @@ export class FinanceService {
     const typeStr = isCredit ? 'Income' : 'Expense';
     const statusDisplay = saved.status === 'pending' ? 'Requested' : 'Approved';
 
+    const employeeName = expense.employee ? `${expense.employee.user?.firstName || ''} ${expense.employee.user?.lastName || ''}`.trim() : undefined;
+
     this.notifyFinanceActivity(
       saved.companyId,
       `Financial Entry ${statusDisplay}: ${saved.title}`,
       `The ${typeStr.toLowerCase()} entry "${saved.title}" has been updated to ${statusDisplay.toLowerCase()}. Amount is ${saved.currency} ${saved.amount}.`,
       'both',
-      saved
+      {
+        id: saved.id,
+        entryType: 'Expense',
+        title: saved.title,
+        amount: saved.amount,
+        currency: saved.currency,
+        financeType: saved.type,
+        category: saved.category,
+        status: saved.status,
+        date: saved.date,
+        description: saved.description,
+        employeeName: employeeName
+      }
     );
 
     return saved;
@@ -1079,7 +1133,18 @@ export class FinanceService {
         `Financial Entry ${statusDisplay}: Payroll — ${empName}`,
         `The payroll entry for ${empName} (${saved.month}/${saved.year}) has been updated to ${statusDisplay.toLowerCase()}. Amount is INR ${netSalary}.`,
         'both',
-        { ...saved, click_action: '/dashboard/finance' }
+        {
+          id: saved.id,
+          entryType: 'Payroll',
+          title: `Payroll for ${empName}`,
+          amount: netSalary,
+          currency: 'INR',
+          month: saved.month,
+          year: saved.year,
+          status: saved.financeStatus,
+          description: saved.notes,
+          employeeName: empName
+        }
       );
     }
 
