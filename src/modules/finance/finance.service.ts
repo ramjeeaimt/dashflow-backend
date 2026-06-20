@@ -616,26 +616,42 @@ export class FinanceService {
     payroll.customEmailBodyHtml = emailBodyHtml;
     this.syncPayrollValuesFromHtml(payroll, payslipHtml);
 
+    // Save early to ensure PDFKit fallback reads the updated numeric values if Puppeteer fails
+    await this.payrollRepository.save(payroll);
+
     const emp = payroll.employee;
     const user = emp?.user;
 
-    // Generate PDF using Puppeteer
-    const executablePath = await chromium.executablePath();
-    const browser = await puppeteer.launch({
-      args: chromium.args,
-      defaultViewport: chromium.defaultViewport,
-      executablePath: executablePath || '/usr/bin/google-chrome', // fallback for local dev
-      headless: chromium.headless === false ? false : true,
-    });
+    let pdfBuffer: Buffer;
+    let fallbackReason: string | null = null;
+    try {
+      // Generate PDF using Puppeteer (Fetch chromium pack on Vercel)
+      const executablePath = await chromium.executablePath(
+        process.env.NODE_ENV === 'production'
+          ? 'https://github.com/Sparticuz/chromium/releases/download/v123.0.1/chromium-v123.0.1-pack.tar'
+          : undefined
+      );
 
-    const page = await browser.newPage();
-    await page.setContent(payslipHtml, { waitUntil: 'networkidle0' });
-    const pdfBuffer = await page.pdf({ 
-      format: 'A4', 
-      printBackground: true,
-      margin: { top: '50px', bottom: '30px', left: '20px', right: '20px' }
-    });
-    await browser.close();
+      const browser = await puppeteer.launch({
+        args: chromium.args,
+        defaultViewport: chromium.defaultViewport,
+        executablePath: executablePath || '/usr/bin/google-chrome', // fallback for local dev
+        headless: chromium.headless === false ? false : true,
+      });
+
+      const page = await browser.newPage();
+      await page.setContent(payslipHtml, { waitUntil: 'networkidle0' });
+      pdfBuffer = await page.pdf({
+        format: 'A4',
+        printBackground: true,
+        margin: { top: '50px', bottom: '30px', left: '20px', right: '20px' }
+      });
+      await browser.close();
+    } catch (error) {
+      fallbackReason = error.message || 'Unknown memory/timeout limit in Vercel';
+      console.warn('[FinanceService] Puppeteer failed in Vercel. Falling back to PDFKit:', fallbackReason);
+      pdfBuffer = await this.generatePayrollSlip(payrollId);
+    }
 
     // Collect additional emails
     const additionalEmails: string[] = [];
@@ -775,7 +791,11 @@ export class FinanceService {
       }
     );
 
-    return saved;
+    return {
+      payroll: saved,
+      fallbackUsed: !!fallbackReason,
+      fallbackReason
+    };
   }
 
   async generatePayrollSingle(attendanceId: string) {
@@ -813,123 +833,167 @@ export class FinanceService {
 
     const emp = payroll.employee;
     const user = emp?.user;
-    const basicSalary = Number(payroll.basicSalary || 0);
-    const deductions = Number(payroll.deductions || 0);
-    const allowances = Number(payroll.allowances || 0);
-    const netSalary = Number(payroll.netSalary || 0);
+    const dbBasicSalary = Number(payroll.basicSalary || 0);
+    const dbDeductions = Number(payroll.deductions || 0);
+    const dbAllowances = Number(payroll.allowances || 0);
+    const dbNetSalary = Number(payroll.netSalary || 0);
 
     const doc = new PDFDocument({ size: 'A4', margin: 40 });
     const chunks: any[] = [];
     doc.on('data', (chunk) => chunks.push(chunk));
 
-    // Logo & Header
+    const extractVal = (id: string, fallback: any) => {
+      if (!payroll.customPayslipHtml) return fallback;
+      let val = fallback;
+      const regex1 = new RegExp(`<input[^>]*id\\s*=\\s*["']${id}["'][^>]*value\\s*=\\s*["']([^"']*)["']`, 'i');
+      const match1 = payroll.customPayslipHtml.match(regex1);
+      if (match1) val = match1[1];
+      else {
+        const regex2 = new RegExp(`<input[^>]*value\\s*=\\s*["']([^"']*)["'][^>]*id\\s*=\\s*["']${id}["']`, 'i');
+        const match2 = payroll.customPayslipHtml.match(regex2);
+        if (match2) val = match2[1];
+      }
+
+      if (typeof val === 'string') {
+        // Decode basic HTML entities
+        return val
+          .replace(/&amp;/g, '&')
+          .replace(/&lt;/g, '<')
+          .replace(/&gt;/g, '>')
+          .replace(/&quot;/g, '"')
+          .replace(/&#39;/g, "'")
+          .replace(/&#x27;/g, "'");
+      }
+      return val;
+    };
+
+    const payMonth = extractVal('payMonth', `${new Date(0, payroll.month - 1).toLocaleString('default', { month: 'long' })} -- ${payroll.year}`);
+    const empName = extractVal('empName', user ? `${user.firstName} ${user.lastName}` : 'N/A');
+    const empId = extractVal('empId', emp?.employeeCode || 'N/A');
+    const designation = extractVal('designation', emp?.designation?.name || 'N/A');
+    const department = extractVal('department', emp?.department?.name || 'N/A');
+    const payPeriod = extractVal('payPeriod', 'N/A');
+
+    const totalWorkingDays = extractVal('totalWorkingDays', '0');
+    const leavesTaken = extractVal('leavesTaken', '0');
+    const actualDaysWorked = extractVal('actualDaysWorked', '0');
+    const availableCL = extractVal('availableCL', '-');
+    const grossSalary = extractVal('grossSalary', dbBasicSalary);
+    const allowances = extractVal('allowances', dbAllowances);
+    const overtime = extractVal('overtime', '0');
+    const deductions = extractVal('deductions', dbDeductions);
+    const netPayable = extractVal('netPayable', dbNetSalary);
+
+    const lwp = extractVal('lwp', '0');
+    const pf = extractVal('pf', '-');
+    const profTax = extractVal('profTax', '-');
+    const remark = extractVal('remark', '-');
+
+    // Layout
+    let currentY = 40;
+
     try {
-      const logoUrl = 'https://res.cloudinary.com/dxju8ikk4/image/upload/v1777469595/difmo_vector_icon.png';
+      const logoUrl = 'https://res.cloudinary.com/dxju8ikk4/image/upload/v1781672256/hgbll6bcqc7b8a8hppbi.png';
       const logoResponse = await axios.get(logoUrl, { responseType: 'arraybuffer' });
-      doc.image(logoResponse.data, 40, 40, { width: 50 });
+      doc.image(logoResponse.data, 40, currentY, { height: 60 });
     } catch (e) {
       console.error('Failed to load logo for PDF:', e.message);
     }
 
-    doc.fillColor('#333').fontSize(22).font('Helvetica-Bold').text('Salary Slip', 100, 45, { align: 'right' });
-    doc.fontSize(10).font('Helvetica').text(`Generated on: ${new Date().toLocaleDateString()}`, 100, 75, { align: 'right' });
+    doc.fillColor('#000').fontSize(11).font('Helvetica-Bold')
+      .text('CIN:U62091UP2025PTC222420', 300, currentY + 10, { width: 255, align: 'right' });
+    doc.font('Helvetica-Bold').text('Email: info@difmo.com', 300, currentY + 25, { width: 255, align: 'right' });
+    doc.font('Helvetica-Bold').text('Phone: +91 9519202509', 300, currentY + 40, { width: 255, align: 'right' });
 
-    // Divider
-    doc.moveTo(40, 100).lineTo(555, 100).strokeColor('#e2e8f0').lineWidth(2).stroke();
+    currentY += 80;
 
-    // Title Section
-    doc.fillColor('#0f172a').fontSize(14).font('Helvetica-Bold').text(`${new Date(0, payroll.month - 1).toLocaleString('default', { month: 'long' })} ${payroll.year} Payroll Statement`, 40, 115);
+    doc.fillColor('#1155cc').fontSize(16).font('Helvetica-Bold')
+      .text('DIFMO PRIVATE LIMITED', 40, currentY, { align: 'center', width: 515 });
 
-    // Helper for drawing tables
-    const drawRow = (y, label1, val1, label2, val2) => {
-      doc.fontSize(9).font('Helvetica-Bold').fillColor('#64748b').text(label1.toUpperCase(), 50, y);
-      doc.font('Helvetica').fillColor('#0f172a').text(String(val1 || 'N/A'), 160, y);
-      if (label2) {
-        doc.font('Helvetica-Bold').fillColor('#64748b').text(label2.toUpperCase(), 300, y);
-        doc.font('Helvetica').fillColor('#0f172a').text(String(val2 || 'N/A'), 410, y);
+    currentY += 30;
+
+    // Helper for table drawing
+    const leftX = 40;
+    const midX = 280;
+    const rightX = 555;
+
+    const drawRow = (y, leftText, rightText, isHeader = false, isSection = false) => {
+      const height = isSection ? 25 : 22;
+
+      doc.rect(leftX, y, midX - leftX, height).stroke();
+      doc.rect(midX, y, rightX - midX, height).stroke();
+
+      if (isSection) {
+        doc.rect(leftX, y, rightX - leftX, height).fill('#d9e2f3');
+        doc.rect(leftX, y, rightX - leftX, height).stroke();
       }
-      doc.moveTo(40, y + 15).lineTo(555, y + 15).strokeColor('#f1f5f9').lineWidth(1).stroke();
+
+      doc.fillColor('#000').fontSize(11).font(isHeader || isSection ? 'Helvetica-Bold' : 'Helvetica');
+      const textY = y + (height - 11) / 2;
+
+      if (isSection) {
+        doc.text(leftText, leftX, textY, { width: midX - leftX, align: 'center' });
+        doc.text(rightText, midX, textY, { width: rightX - midX, align: 'center' });
+      } else {
+        doc.text(leftText, leftX + 8, textY);
+        if (leftText === 'Remark:' || leftText === 'Employee Name' || leftText === 'Employee ID' || leftText === 'Designation' || leftText === 'Department' || leftText === 'Pay Period') {
+          doc.text(String(rightText), midX + 8, textY);
+        } else {
+          doc.text(String(rightText), midX, textY, { width: rightX - midX - 8, align: 'right' });
+        }
+      }
+      return y + height;
     };
+
+    // Title Row
+    doc.rect(leftX, currentY, rightX - leftX, 40).stroke();
+    doc.fillColor('#000').fontSize(14).font('Helvetica-Bold').text('Salary Slip', leftX, currentY + 8, { width: rightX - leftX, align: 'center' });
+    doc.fontSize(12).font('Helvetica').text('For the month of: ', leftX + 160, currentY + 25);
+    doc.font('Helvetica-Bold').text(payMonth, leftX + 260, currentY + 25);
+    currentY += 40;
 
     // Employee Details Section
-    let currentY = 145;
-    doc.rect(40, currentY, 515, 20).fill('#f8fafc');
-    doc.fillColor('#0f172a').font('Helvetica-Bold').text('EMPLOYEE INFORMATION', 50, currentY + 6);
-    currentY += 30;
-
-    drawRow(currentY, 'Employee Name', user ? `${user.firstName} ${user.lastName}` : 'N/A', 'Designation', emp?.designation?.name || 'N/A'); currentY += 22;
-    drawRow(currentY, 'Employee ID', emp?.employeeCode || 'N/A', 'Department', emp?.department?.name || 'N/A'); currentY += 35;
+    currentY = drawRow(currentY, 'Employee Details', 'Details', false, true);
+    currentY = drawRow(currentY, 'Employee Name', empName);
+    currentY = drawRow(currentY, 'Employee ID', empId);
+    currentY = drawRow(currentY, 'Designation', designation);
+    currentY = drawRow(currentY, 'Department', department);
+    currentY = drawRow(currentY, 'Pay Period', payPeriod);
 
     // Salary Components
-    doc.rect(40, currentY, 515, 20).fill('#f8fafc');
-    doc.fillColor('#0f172a').font('Helvetica-Bold').text('SALARY BREAKDOWN', 50, currentY + 6);
-    doc.text('AMOUNT (INR)', 450, currentY + 6, { align: 'right', width: 95 });
-    currentY += 30;
+    currentY = drawRow(currentY, 'Salary Components', 'Amount (INR)', false, true);
+    currentY = drawRow(currentY, 'Total Working Days', totalWorkingDays);
+    currentY = drawRow(currentY, 'Leaves Taken', leavesTaken);
+    currentY = drawRow(currentY, 'Actual Days Worked', actualDaysWorked);
+    currentY = drawRow(currentY, 'Available CL', availableCL);
+    currentY = drawRow(currentY, 'Gross Salary', grossSalary);
+    currentY = drawRow(currentY, 'Allowances', allowances);
+    currentY = drawRow(currentY, 'Overtime', overtime);
+    currentY = drawRow(currentY, 'Deductions', deductions);
+    currentY = drawRow(currentY, 'Net Payable Salary', netPayable);
 
-    const drawSalaryRow = (y, label, val, isTotal = false) => {
-      doc.fontSize(isTotal ? 11 : 10).font(isTotal ? 'Helvetica-Bold' : 'Helvetica').fillColor(isTotal ? '#ffffff' : '#1e293b').text(label, 50, y);
-      doc.text(`${Number(val).toFixed(2)}`, 450, y, { align: 'right', width: 95 });
-      if (!isTotal) doc.moveTo(40, y + 15).lineTo(555, y + 15).strokeColor('#f1f5f9').stroke();
-    };
+    // Deduction Breakdown
+    currentY = drawRow(currentY, 'Deduction Breakdown', 'Amount (INR)', false, true);
+    currentY = drawRow(currentY, 'Leave Without Pay (LWP)', lwp);
+    currentY = drawRow(currentY, 'Provident Fund', pf);
+    currentY = drawRow(currentY, 'Professional Tax', profTax);
+    currentY = drawRow(currentY, 'Remark:', remark);
 
-    drawSalaryRow(currentY, 'Basic Salary', basicSalary); currentY += 22;
-    drawSalaryRow(currentY, 'Allowances & Bonuses', allowances); currentY += 22;
-    drawSalaryRow(currentY, 'Total Deductions', deductions); currentY += 25;
-
-    doc.rect(40, currentY - 5, 515, 30).fill('#0f172a');
-    drawSalaryRow(currentY + 5, 'NET PAYABLE SALARY (INR)', netSalary, true);
-    currentY += 50;
-
-    doc.fillColor('#0f172a').fontSize(11).font('Helvetica-Bold').text('Attendance Summary', 40, currentY);
-    currentY += 20;
-    doc.fontSize(10).font('Helvetica').fillColor('#64748b');
-    doc.text(`Total Days: 24  |  Worked: 24  |  Leaves: 0`, 40, currentY);
-    currentY += 60;
-
-    doc.moveTo(40, currentY).lineTo(555, currentY).strokeColor('#000').lineWidth(1).stroke();
-    currentY += 25;
-
-    // Optional Notes Section
-    if (payroll.notes) {
-      doc.fillColor('#0f172a').fontSize(11).font('Helvetica-Bold').text('Manager Reminders & Notes', 40, currentY);
-      currentY += 15;
-      doc.fontSize(10).font('Helvetica').fillColor('#475569').text(payroll.notes, 40, currentY, { width: 515, align: 'left' });
-      currentY += 40; // Add space after notes
-    }
-
-    const sigX = 50;
-    const contactX = 350;
-
-    // Identity Column (Left)
-    doc.fillColor('#000').fontSize(14).font('Helvetica-Bold').text('Team DIFMO', sigX, currentY);
-    doc.fontSize(10).font('Helvetica').fillColor('#1e293b').text('Corporate Support', sigX, currentY + 18);
-    doc.fontSize(9).font('Helvetica-Oblique').fillColor('#475569').text('Communications & Experience', sigX, currentY + 30);
-    doc.fontSize(10).font('Helvetica-Bold').fillColor('#000').text('DIFMO Technologies Pvt Ltd', sigX, currentY + 45);
-
-    // Contact Column (Right) - Starting at same Y
-    const drawContact = (y, icon, text) => {
-      doc.rect(contactX, y, 14, 14).fill('#000');
-      doc.fillColor('#fff').fontSize(8).font('Helvetica-Bold').text(icon, contactX, y + 3, { align: 'center', width: 14 });
-      doc.fillColor('#000').fontSize(10).font('Helvetica').text(text, contactX + 25, y + 2);
-    };
-
-    drawContact(currentY, 'E', 'info@difmo.com');
-    drawContact(currentY + 20, 'A', '4/37 Vibhav Khand, Gomtinagr Lucknow, Uttar Pradesh 226016, India');
-    drawContact(currentY + 40, 'W', 'www.difmo.com');
-
-    // Second Row: The Banner Image
-    currentY += 75;
+    // Signature Row
+    doc.rect(leftX, currentY, rightX - leftX, 70).stroke();
     try {
-      const avatarUrl = 'https://res.cloudinary.com/dxju8ikk4/image/upload/v1777468072/difmo_banner_final.png';
-      const avatarResponse = await axios.get(avatarUrl, { responseType: 'arraybuffer' });
-      doc.image(avatarResponse.data, 40, currentY, { width: 515 });
-      currentY += 120; // Adjust for banner height
-    } catch (e) { }
+      const signUrl = 'https://res.cloudinary.com/dxju8ikk4/image/upload/v1781672045/au2u7m48f06cwqliflvw.png';
+      const signResponse = await axios.get(signUrl, { responseType: 'arraybuffer' });
+      doc.image(signResponse.data, rightX - 160, currentY + 10, { height: 50 });
+    } catch (e) {
+      console.error('Failed to load sign for PDF:', e.message);
+    }
+    currentY += 70;
 
-    currentY += 20;
-    doc.moveTo(40, currentY).lineTo(555, currentY).strokeColor('#000').lineWidth(1).stroke();
-
-    doc.fontSize(7).fillColor('#94a3b8').text('CONFIDENTIAL: This document contains proprietary information and is intended for the named employee only. © 2026 DIFMO PRIVATE LIMITED.', 40, 780, { align: 'center' });
+    // Note Row
+    doc.rect(leftX, currentY, rightX - leftX, 45).stroke();
+    doc.fillColor('#000').fontSize(11).font('Helvetica-Bold').text('Note:', leftX + 8, currentY + 8);
+    doc.fontSize(10).font('Helvetica-Oblique').text('This is a system generated pay sheet hence signature not required.', leftX + 8, currentY + 22);
 
     doc.end();
 
