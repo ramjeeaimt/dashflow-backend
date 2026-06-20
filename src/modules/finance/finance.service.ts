@@ -852,6 +852,11 @@ export class FinanceService {
         const regex2 = new RegExp(`<input[^>]*value\\s*=\\s*["']([^"']*)["'][^>]*id\\s*=\\s*["']${id}["']`, 'i');
         const match2 = payroll.customPayslipHtml.match(regex2);
         if (match2) val = match2[1];
+        else {
+          const regex3 = new RegExp(`<textarea[^>]*id\\s*=\\s*["']${id}["'][^>]*>([\\s\\S]*?)</textarea>`, 'i');
+          const match3 = payroll.customPayslipHtml.match(regex3);
+          if (match3) val = match3[1];
+        }
       }
 
       if (typeof val === 'string') {
@@ -918,7 +923,14 @@ export class FinanceService {
     const rightX = 555;
 
     const drawRow = (y, leftText, rightText, isHeader = false, isSection = false) => {
-      const height = isSection ? 25 : 22;
+      let height = isSection ? 25 : 22;
+
+      // Special handling for Remark to allow multi-line wrapping
+      if (leftText === 'Remark:') {
+        doc.fontSize(11).font('Helvetica');
+        const textHeight = doc.heightOfString(String(rightText), { width: rightX - midX - 16 });
+        height = Math.max(22, textHeight + 10);
+      }
 
       doc.rect(leftX, y, midX - leftX, height).stroke();
       doc.rect(midX, y, rightX - midX, height).stroke();
@@ -929,14 +941,21 @@ export class FinanceService {
       }
 
       doc.fillColor('#000').fontSize(11).font(isHeader || isSection ? 'Helvetica-Bold' : 'Helvetica');
-      const textY = y + (height - 11) / 2;
+      let textY = y + (height - 11) / 2;
+
+      // If remark height is expanded, start text near the top rather than middle
+      if (leftText === 'Remark:' && height > 22) {
+        textY = y + 5;
+      }
 
       if (isSection) {
         doc.text(leftText, leftX, textY, { width: midX - leftX, align: 'center' });
         doc.text(rightText, midX, textY, { width: rightX - midX, align: 'center' });
       } else {
-        doc.text(leftText, leftX + 8, textY);
-        if (leftText === 'Remark:' || leftText === 'Employee Name' || leftText === 'Employee ID' || leftText === 'Designation' || leftText === 'Department' || leftText === 'Pay Period') {
+        doc.text(leftText, leftX + 8, leftText === 'Remark:' && height > 22 ? y + 5 : textY);
+        if (leftText === 'Remark:') {
+          doc.text(String(rightText), midX + 8, textY, { width: rightX - midX - 16 });
+        } else if (leftText === 'Employee Name' || leftText === 'Employee ID' || leftText === 'Designation' || leftText === 'Department' || leftText === 'Pay Period') {
           doc.text(String(rightText), midX + 8, textY);
         } else {
           doc.text(String(rightText), midX, textY, { width: rightX - midX - 8, align: 'right' });
