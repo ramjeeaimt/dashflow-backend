@@ -5,8 +5,7 @@ import { Leave } from './leave.entity';
 import { CreateLeaveDto, UpdateLeaveStatusDto } from './dto/create-leave.dto';
 import { Employee } from '../employees/employee.entity';
 import { Attendance } from '../attendance/attendance.entity';
-import { NotificationsService } from '../notifications/notifications.service';
-import { MailService } from '../mail/mail.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 @Injectable()
 export class LeavesService {
@@ -18,8 +17,7 @@ export class LeavesService {
     private employeeRepository: Repository<Employee>,
     @InjectRepository(Attendance)
     private attendanceRepository: Repository<Attendance>,
-    private readonly notificationsService: NotificationsService,
-    private readonly mailService: MailService,
+    private readonly eventEmitter: EventEmitter2,
   ) { }
 
   // ✅ CREATE LEAVE
@@ -67,70 +65,20 @@ export class LeavesService {
 
     const savedLeave = await this.leavesRepository.save(leave);
 
-    //  Real-time Notification to Admin
     try {
-      await this.notificationsService.send({
-        title: 'Difmo Pvt Ltd: New Leave Request',
-        message: `${employee.user?.firstName || 'An employee'} has applied for leave from ${createLeaveDto.startDate} to ${createLeaveDto.endDate}.`,
-        type: 'push',
-        recipientFilter: 'admin',
+      this.eventEmitter.emit('leave.requested', {
+        leaveId: savedLeave.id,
+        employeeId: employee.id,
+        employeeName: employee.user?.firstName || 'An employee',
+        startDate: createLeaveDto.startDate,
+        endDate: createLeaveDto.endDate,
+        reason: createLeaveDto.reason,
         companyId: employee.companyId,
-        metadata: {
-          type: 'LEAVE_REQUEST',
-          employeeName: employee.user?.firstName || 'An employee',
-          startDate: createLeaveDto.startDate,
-          endDate: createLeaveDto.endDate,
-          leaveId: savedLeave.id,
-          employeeId: employee.id
-        }
+        companyEmail: employee.company?.email,
+        attendanceAlertEmails: employee.company?.attendanceAlertEmails,
       });
     } catch (err) {
-      console.error('[LeavesService] Failed to send admin notification:', err.message);
-    }
-
-    // Send Leave Request email to configured admins and fallback company admins
-    try {
-      const adminEmails: string[] = [];
-      const companyId = employee.companyId;
-
-      if (employee.company?.attendanceAlertEmails) {
-        const configuredEmails = employee.company.attendanceAlertEmails
-          .split(',')
-          .map(email => email.trim())
-          .filter(Boolean);
-        adminEmails.push(...configuredEmails);
-      }
-
-      if (companyId) {
-        const allEmployees = await this.employeeRepository.find({
-          where: { companyId, isDeleted: false },
-          relations: ['user', 'user.roles'],
-        });
-        const companyAdmins = allEmployees
-          .filter(emp => emp.user?.email && emp.user?.roles?.some(role => ['admin', 'super admin', 'superadmin', 'manager'].includes(role.name.toLowerCase())))
-          .map(emp => emp.user.email);
-        adminEmails.push(...companyAdmins);
-      }
-
-      if (employee.company?.email) {
-        adminEmails.push(employee.company.email);
-      }
-
-      const uniqueAdmins = [...new Set(adminEmails)].filter(email => !!email);
-      const empName = `${employee.user?.firstName} ${employee.user?.lastName}`;
-      uniqueAdmins.forEach(adminEmail => {
-        // Send using MailService, which supports the global email template
-        this.mailService.sendLeaveStatusEmail(adminEmail, {
-          employeeName: empName,
-          status: 'REQUESTED',
-          startDate: createLeaveDto.startDate,
-          endDate: createLeaveDto.endDate,
-          userReason: createLeaveDto.reason || 'Not specified',
-          companyId: employee.companyId,
-        }).catch(err => console.error(`[LeavesService] Failed to send leave alert to ${adminEmail}:`, err));
-      });
-    } catch (err) {
-      console.error('[LeavesService] Admin email alerting failed for leave request:', err);
+      console.error('[LeavesService] Failed to emit leave.requested event:', err.message);
     }
 
     return savedLeave;
@@ -251,109 +199,24 @@ export class LeavesService {
       }
     }
 
-    // 1. Notification to Employee
     try {
-      await this.notificationsService.send({
-        title: `Difmo Pvt Ltd: Leave ${updatedLeave.status}`,
-        message: `Your leave application has been ${updatedLeave.status.toLowerCase()}.${updatedLeave.adminComment ? ` Admin Note: ${updatedLeave.adminComment}` : ''}`,
-        type: 'push',
-        recipientFilter: 'employees',
-        recipientIds: [updatedLeave.employee?.userId].filter(Boolean) as string[],
-        companyId: updatedLeave.employee?.companyId || '',
-        metadata: {
-          type: 'LEAVE_STATUS',
-          leaveId: updatedLeave.id,
-          status: updatedLeave.status,
-          comment: updatedLeave.adminComment
-        }
+      this.eventEmitter.emit('leave.status.updated', {
+        leaveId: updatedLeave.id,
+        employeeId: updatedLeave.employeeId,
+        employeeUserId: updatedLeave.employee?.userId,
+        employeeName: updatedLeave.employee?.user?.firstName || 'Employee',
+        employeeEmail: updatedLeave.employee?.user?.email,
+        status: updatedLeave.status,
+        startDate: updatedLeave.startDate,
+        endDate: updatedLeave.endDate,
+        reason: updatedLeave.reason,
+        adminComment: updatedLeave.adminComment,
+        companyId: updatedLeave.employee?.companyId,
+        companyEmail: updatedLeave.employee?.company?.email,
+        attendanceAlertEmails: updatedLeave.employee?.company?.attendanceAlertEmails,
       });
     } catch (err) {
-      console.error('[LeavesService] Failed to send employee notification:', err.message);
-    }
-
-    // 2. Notification to Admin (Both Side)
-    try {
-      await this.notificationsService.send({
-        title: `Difmo Pvt Ltd: Leave Request ${updatedLeave.status.charAt(0) + updatedLeave.status.slice(1).toLowerCase()}`,
-        message: `Leave request for ${updatedLeave.employee?.user?.firstName || 'Employee'} has been ${updatedLeave.status.toLowerCase()}.`,
-        type: 'push',
-        recipientFilter: 'admin',
-        companyId: updatedLeave.employee?.companyId || '',
-        metadata: {
-          type: 'LEAVE_STATUS_UPDATED',
-          leaveId: updatedLeave.id,
-          status: updatedLeave.status,
-          employeeName: updatedLeave.employee?.user?.firstName || 'Employee',
-          comment: updatedLeave.adminComment
-        }
-      });
-    } catch (err) {
-      console.error('[LeavesService] Failed to send admin notification:', err.message);
-    }
-
-    // Also send direct email using nodemailer for important status updates to employee
-    try {
-      const empEmail = updatedLeave.employee?.user?.email;
-      if (empEmail) {
-        await this.mailService.sendLeaveStatusEmail(empEmail, {
-          employeeName: updatedLeave.employee?.user?.firstName || 'Employee',
-          status: updatedLeave.status,
-          startDate: updatedLeave.startDate,
-          endDate: updatedLeave.endDate,
-          userReason: updatedLeave.reason,
-          adminComment: updatedLeave.adminComment,
-          actionUrl: 'https://dashflow-frontend.vercel.app/employee/leaves',
-          companyId: updatedLeave.employee?.companyId,
-        });
-      }
-    } catch (emailErr) {
-      console.error('[LeavesService] Failed to send direct leave email:', emailErr?.message || emailErr);
-    }
-
-    // 3. Email to Admins and Configured Attendance Alert Emails
-    try {
-      const adminEmails: string[] = [];
-      const companyId = updatedLeave.employee?.companyId;
-
-      if (updatedLeave.employee?.company?.attendanceAlertEmails) {
-        const configuredEmails = updatedLeave.employee.company.attendanceAlertEmails
-          .split(',')
-          .map(email => email.trim())
-          .filter(Boolean);
-        adminEmails.push(...configuredEmails);
-      }
-
-      if (companyId) {
-        const allEmployees = await this.employeeRepository.find({
-          where: { companyId, isDeleted: false },
-          relations: ['user', 'user.roles'],
-        });
-        const companyAdmins = allEmployees
-          .filter(emp => emp.user?.email && emp.user?.roles?.some(role => ['admin', 'super admin', 'superadmin', 'manager'].includes(role.name.toLowerCase())))
-          .map(emp => emp.user.email);
-        adminEmails.push(...companyAdmins);
-      }
-
-      if (updatedLeave.employee?.company?.email) {
-        adminEmails.push(updatedLeave.employee.company.email);
-      }
-
-      const uniqueAdmins = [...new Set(adminEmails)].filter(email => !!email);
-      const empName = `${updatedLeave.employee?.user?.firstName || ''} ${updatedLeave.employee?.user?.lastName || ''}`.trim() || 'Employee';
-      
-      uniqueAdmins.forEach(adminEmail => {
-        this.mailService.sendLeaveStatusEmail(adminEmail, {
-          employeeName: empName,
-          status: updatedLeave.status,
-          startDate: updatedLeave.startDate,
-          endDate: updatedLeave.endDate,
-          userReason: updatedLeave.reason,
-          adminComment: updatedLeave.adminComment,
-          companyId: updatedLeave.employee?.companyId,
-        }).catch(err => console.error(`[LeavesService] Failed to send leave status update to admin ${adminEmail}:`, err));
-      });
-    } catch (err) {
-      console.error('[LeavesService] Admin email alerting failed for leave status update:', err);
+      console.error('[LeavesService] Failed to emit leave.status.updated event:', err.message);
     }
 
     return updatedLeave;

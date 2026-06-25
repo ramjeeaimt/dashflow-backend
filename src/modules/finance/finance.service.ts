@@ -44,7 +44,7 @@ export class FinanceService {
   // Exchange rates relative to 1 USD
   private readonly rates = {
     USD: 1,
-    INR: 83.5,
+    INR: 93.5,
     GBP: 0.78,
     EUR: 0.92,
     AED: 3.67

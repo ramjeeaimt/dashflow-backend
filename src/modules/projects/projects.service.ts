@@ -39,8 +39,35 @@ export class ProjectsService {
     if ((data as any).deadline === '' || (typeof data.deadline === 'string' && (data.deadline as string).trim() === '')) {
       data.deadline = undefined;
     }
+    if ((data as any)['assignedEmployeeIds'] && Array.isArray((data as any)['assignedEmployeeIds'])) {
+      data.assignedPeople = (data as any)['assignedEmployeeIds'];
+    }
+
+    if (Array.isArray(data.assignedPeople)) {
+      data.assignedPeople = (data.assignedPeople as string[]).join(',') as any;
+    }
 
     const project = await this.projectRepository.save(this.projectRepository.create(data));
+
+    // Notify Admins about the project creation (run in background)
+    this.resolveEmployeeNames(project.assignedPeople).then(assignedNames => {
+      this.notificationsService.send({
+        title: 'Difmo Pvt Ltd: New Project Created',
+        message: `A new project has been created: ${project.projectName}.`,
+        type: 'both',
+        recipientFilter: 'admin',
+        companyId: project.companyId,
+        metadata: {
+          type: 'PROJECT_CREATED',
+          projectId: project.id,
+          projectName: project.projectName,
+          deadline: project.deadline,
+          project: { ...project, assignedPeople: assignedNames }
+        }
+      }).catch(err => {
+        console.error('[ProjectsService] Failed to notify admins of project creation:', err.message);
+      });
+    });
 
     // Send notifications to assigned employees
     if (project.assignedPeople && project.assignedPeople.length > 0) {
@@ -93,8 +120,103 @@ export class ProjectsService {
   }
 
   async updateProject(id: string, data: Partial<Project>): Promise<Project | null> {
-    await this.projectRepository.update(id, data);
-    return this.findOneProject(id);
+    try {
+      const updateData: any = {};
+      const columnNames = this.projectRepository.metadata.columns.map(c => c.propertyName);
+      
+      for (const key of Object.keys(data)) {
+        if (columnNames.includes(key) && key !== 'id' && key !== 'createdAt' && key !== 'updatedAt') {
+          updateData[key] = (data as any)[key];
+        }
+      }
+
+      // Sanitize dates
+      if (updateData.assigningDate === '' || (typeof updateData.assigningDate === 'string' && updateData.assigningDate.trim() === '')) {
+        updateData.assigningDate = null;
+      }
+      if (updateData.deadline === '' || (typeof updateData.deadline === 'string' && updateData.deadline.trim() === '')) {
+        updateData.deadline = null;
+      }
+
+      // Map frontend assignedEmployeeIds to assignedPeople if provided
+      if (data['assignedEmployeeIds'] && Array.isArray(data['assignedEmployeeIds'])) {
+        updateData.assignedPeople = data['assignedEmployeeIds'];
+      }
+
+      // Fetch old project to compare changes
+      const oldProject = await this.findOneProject(id);
+      const updatedFields: { field: string; oldValue: any; newValue: any }[] = [];
+
+      if (oldProject) {
+        for (const key of Object.keys(updateData)) {
+          let oldVal = (oldProject as any)[key];
+          let newVal = updateData[key];
+
+          // Handle simple-array comparison (assignedPeople)
+          if (key === 'assignedPeople') {
+            const oldArr = Array.isArray(oldVal) ? oldVal.join(',') : (oldVal || '');
+            const newArr = Array.isArray(newVal) ? newVal.join(',') : (newVal || '');
+            if (oldArr !== newArr) {
+              updatedFields.push({ field: key, oldValue: oldArr, newValue: newArr });
+            }
+          } else {
+            const normalizedOld = (oldVal === null || oldVal === undefined) ? '' : String(oldVal);
+            const normalizedNew = (newVal === null || newVal === undefined) ? '' : String(newVal);
+            if (normalizedOld !== normalizedNew) {
+              updatedFields.push({ field: key, oldValue: oldVal, newValue: newVal });
+            }
+          }
+        }
+      }
+
+      // TypeORM update() does not apply transformers, so simple-arrays must be joined manually
+      if (Array.isArray(updateData.assignedPeople)) {
+        updateData.assignedPeople = updateData.assignedPeople.join(',');
+      }
+
+      if (Object.keys(updateData).length > 0) {
+        await this.projectRepository.update(id, updateData);
+      }
+      
+      const updatedProject = await this.findOneProject(id);
+
+      if (updatedProject && updatedFields.length > 0) {
+        // 1. Notify Admins about the project update with changed fields (run in background)
+        Promise.all([
+          this.resolveEmployeeNames(oldProject?.assignedPeople),
+          this.resolveEmployeeNames(updatedProject.assignedPeople)
+        ]).then(([oldAssignedNames, newAssignedNames]) => {
+          
+          const assignedField = updatedFields.find(f => f.field === 'assignedPeople');
+          if (assignedField) {
+            assignedField.oldValue = oldAssignedNames || 'none';
+            assignedField.newValue = newAssignedNames || 'none';
+          }
+
+          this.notificationsService.send({
+            title: 'Difmo Pvt Ltd: Project Updated',
+            message: `The project "${updatedProject.projectName}" has been updated.`,
+            type: 'both',
+            recipientFilter: 'admin',
+            companyId: updatedProject.companyId,
+            metadata: {
+              type: 'PROJECT_UPDATED',
+              projectId: updatedProject.id,
+              projectName: updatedProject.projectName,
+              updatedFields: updatedFields,
+              project: { ...updatedProject, assignedPeople: newAssignedNames }
+            }
+          }).catch(err => {
+            console.error('[ProjectsService] Failed to notify admins of project update:', err.message);
+          });
+        });
+      }
+
+      return updatedProject;
+    } catch (error) {
+      console.error('[ProjectsService.updateProject] Error updating project:', error);
+      throw error;
+    }
   }
 
   async deleteProject(id: string): Promise<void> {
@@ -167,5 +289,30 @@ export class ProjectsService {
       where: { id },
       relations: ['assignee'],
     });
+  }
+  async resolveEmployeeNames(assignedPeople: any): Promise<string> {
+    try {
+      if (!assignedPeople) return '';
+      
+      let ids: string[] = [];
+      if (Array.isArray(assignedPeople)) {
+        ids = assignedPeople;
+      } else if (typeof assignedPeople === 'string') {
+        ids = assignedPeople.split(',').map(id => id.trim()).filter(id => id);
+      }
+
+      if (ids.length === 0) return '';
+
+      const employees = await this.employeeRepository.find({
+        where: { id: In(ids) },
+        select: ['id', 'user'],
+        relations: ['user']
+      });
+
+      return employees.map(emp => emp.user ? `${emp.user.firstName} ${emp.user.lastName}` : 'Unknown Employee').join(', ');
+    } catch (err) {
+      console.error('[ProjectsService] Error resolving employee names:', err.message);
+      return Array.isArray(assignedPeople) ? assignedPeople.join(', ') : String(assignedPeople);
+    }
   }
 }

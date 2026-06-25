@@ -4,6 +4,7 @@ import { Employee } from './employee.entity';
 import { Company } from '../companies/company.entity';
 import { EmployeeService } from './employee.service';
 import { EmployeeController } from './employee.controller';
+import { EmployeeListener } from './listeners/employee.listener';
 
 import { UserModule } from '../users/user.module';
 import { AccessControlModule } from '../access-control/access-control.module';
@@ -19,7 +20,7 @@ import { MailModule } from '../mail/mail.module';
     MailModule,
   ],
   controllers: [EmployeeController],
-  providers: [EmployeeService],
+  providers: [EmployeeService, EmployeeListener],
   exports: [EmployeeService],
 })
 export class EmployeeModule {}

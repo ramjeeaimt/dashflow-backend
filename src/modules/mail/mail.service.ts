@@ -52,23 +52,23 @@ export class MailService {
   // Leave status email
   async sendLeaveStatusEmail(
     to: string,
-    data: { 
-      employeeName: string; 
-      status: string; 
-      startDate: string; 
-      endDate: string; 
-      userReason?: string; 
-      adminComment?: string; 
-      actionUrl?: string; 
-      companyId?: string 
+    data: {
+      employeeName: string;
+      status: string;
+      startDate: string;
+      endDate: string;
+      userReason?: string;
+      adminComment?: string;
+      actionUrl?: string;
+      companyId?: string
     },
   ) {
     const statusUpper = data.status.toUpperCase();
-    
+
     // Create distinct subjects so email clients don't merge/hide them if Employee = Admin
     const isForEmployee = !!data.actionUrl;
-    const subject = isForEmployee 
-      ? `Your Leave Application is ${statusUpper}` 
+    const subject = isForEmployee
+      ? `Your Leave Application is ${statusUpper}`
       : `Leave Application ${statusUpper} - ${data.employeeName}`;
 
     let color = '#f59e0b';
@@ -158,7 +158,7 @@ export class MailService {
     const formattedTime = this.formatTo12Hour(data.time);
     const isLate = data.status === 'late';
     const subject = isLate
-      ? `⚠️ Late Check-in Alert: ${data.employeeName} - ${data.date}`
+      ? `Late Check-in Alert: ${data.employeeName} - ${data.date}`
       : `Check-in Confirmed: ${data.employeeName} - ${data.date}`;
 
     let color = '#3b82f6';
@@ -345,5 +345,52 @@ export class MailService {
     `;
     const customHtml = await this.getCustomHtml(data.companyId, {}, defaultMsgHtml);
     await this.mailerService.sendMail({ to, subject: 'Password Reset OTP', html: customHtml });
+  }
+  // Admin Notification: Employee Created
+  async sendAdminEmployeeCreatedEmail(
+    to: string,
+    data: {
+      employeeName: string;
+      employeeEmail: string;
+      companyName?: string;
+    },
+  ) {
+    const defaultMsgHtml = `
+      <div style="background:#f8fafc;padding:24px;border-left:4px solid #10b981;">
+        <h2 style="color:#10b981;font-size:20px;margin:0 0 12px;">New Employee Added</h2>
+        <p style="margin:0;color:#475569;">A new employee has been successfully added to your organization.</p>
+        <div style="margin-top:16px;font-size:14px;color:#334155;">
+          <p style="margin:4px 0;"><strong>Name:</strong> ${data.employeeName}</p>
+          <p style="margin:4px 0;"><strong>Email:</strong> ${data.employeeEmail}</p>
+        </div>
+      </div>
+    `;
+    const customHtml = await this.getCustomHtml(undefined, data, defaultMsgHtml);
+    await this.mailerService.sendMail({ to, subject: 'New Employee Added', html: customHtml });
+  }
+
+  // Admin Notification: Employee Roles Updated
+  async sendAdminEmployeeUpdatedEmail(
+    to: string,
+    data: {
+      employeeName: string;
+      employeeEmail: string;
+      roles: string;
+      companyName?: string;
+    },
+  ) {
+    const defaultMsgHtml = `
+      <div style="background:#f8fafc;padding:24px;border-left:4px solid #3b82f6;">
+        <h2 style="color:#3b82f6;font-size:20px;margin:0 0 12px;">Employee Roles Updated</h2>
+        <p style="margin:0;color:#475569;">The system roles for an employee have been updated.</p>
+        <div style="margin-top:16px;font-size:14px;color:#334155;">
+          <p style="margin:4px 0;"><strong>Name:</strong> ${data.employeeName}</p>
+          <p style="margin:4px 0;"><strong>Email:</strong> ${data.employeeEmail}</p>
+          <p style="margin:4px 0;"><strong>New Roles:</strong> ${data.roles}</p>
+        </div>
+      </div>
+    `;
+    const customHtml = await this.getCustomHtml(undefined, data, defaultMsgHtml);
+    await this.mailerService.sendMail({ to, subject: 'Employee Roles Updated', html: customHtml });
   }
 }

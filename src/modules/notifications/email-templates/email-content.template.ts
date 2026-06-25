@@ -245,6 +245,148 @@ export function getFinanceUpdateContent(
     `;
 }
 
+// ─── Project Created ──────────────────────────────────────────────────────────────
+
+export function getProjectCreatedContent(
+    title: string,
+    message: string,
+    metadata: any,
+    appUrl: string,
+): string {
+    let detailsHtml = '';
+
+    if (metadata.project) {
+        const ignoredKeys = ['id', 'companyId', 'createdAt', 'updatedAt', 'clientId', 'company', 'client', 'budget'];
+        const keys = Object.keys(metadata.project).filter(k => !ignoredKeys.includes(k));
+
+        let rows = keys.map(key => {
+            return `
+                <tr>
+                    <td style="color: #64748b; font-size: 14px; padding: 10px 8px; border-bottom: 1px solid #f1f5f9; font-weight: 600;">
+                        ${key}
+                    </td>
+                    <td style="color: #334155; font-size: 14px; padding: 10px 8px; border-bottom: 1px solid #f1f5f9;">
+                        ${typeof metadata.project[key] === 'object' && metadata.project[key] !== null ? JSON.stringify(metadata.project[key]) : (metadata.project[key] || '<em>none</em>')}
+                    </td>
+                </tr>
+            `;
+        }).join('');
+
+        detailsHtml = `
+            <div style="margin: 25px 0; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px; background-color: #fff;">
+                <h4 style="margin-top: 0; margin-bottom: 15px; color: #0f172a; font-size: 16px;">Project Details</h4>
+                <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
+                    <thead>
+                        <tr>
+                            <th align="left" style="color: #0f172a; font-size: 14px; padding: 8px; border-bottom: 2px solid #e2e8f0; width: 35%;">Field</th>
+                            <th align="left" style="color: #0f172a; font-size: 14px; padding: 8px; border-bottom: 2px solid #e2e8f0;">Value</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${rows}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    }
+
+    return `
+        <div style="border-left: 4px solid #3b82f6; padding: 20px; background-color: #eff6ff; margin: 20px 0;">
+            <h3 style="color: #3b82f6; margin-top: 0; font-size: 20px;">New Project Created</h3>
+            <p style="color: #0f172a; font-size: 22px; font-weight: 800; margin: 10px 0;">${metadata.projectName || title}</p>
+            <p style="color: #334155; font-size: 16px; margin-bottom: 0;">${message}</p>
+        </div>
+        ${detailsHtml}
+        <div style="margin-top: 30px;">
+            <a href="${appUrl}/projects"
+               style="background-color: #0f172a; color: white; padding: 12px 25px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: 600;">
+                View Project
+            </a>
+        </div>
+    `;
+}
+
+// ─── Project Updated ────────────────────────────────────────────────────────────
+
+export function getProjectUpdatedContent(
+    title: string,
+    message: string,
+    metadata: any,
+    appUrl: string,
+): string {
+    let updatesHtml = '';
+
+    if (metadata.project) {
+        const ignoredKeys = ['id', 'companyId', 'createdAt', 'updatedAt', 'clientId', 'company', 'client', 'budget'];
+        const keys = Object.keys(metadata.project).filter(k => !ignoredKeys.includes(k));
+
+        let rows = keys.map(key => {
+            const updatedField = metadata.updatedFields?.find((u: any) => u.field === key);
+
+            if (updatedField) {
+                return `
+                    <tr>
+                        <td style="color: #64748b; font-size: 14px; padding: 10px 8px; border-bottom: 1px solid #f1f5f9; font-weight: 600;">
+                            ${key} <span style="color: #ef4444; font-weight: bold;">*</span>
+                        </td>
+                        <td style="color: #0f172a; font-size: 14px; padding: 10px 8px; border-bottom: 1px solid #f1f5f9;">
+                            <span style="color: #ef4444; text-decoration: line-through;">${updatedField.oldValue || '<em>none</em>'}</span>
+                            <span style="margin: 0 8px; color: #94a3b8;">&rarr;</span>
+                            <span style="color: #10b981; font-weight: bold;">${updatedField.newValue || '<em>none</em>'}</span>
+                        </td>
+                    </tr>
+                `;
+            } else {
+                return `
+                    <tr>
+                        <td style="color: #64748b; font-size: 14px; padding: 10px 8px; border-bottom: 1px solid #f1f5f9; font-weight: 600;">
+                            ${key}
+                        </td>
+                        <td style="color: #334155; font-size: 14px; padding: 10px 8px; border-bottom: 1px solid #f1f5f9;">
+                            ${typeof metadata.project[key] === 'object' && metadata.project[key] !== null ? JSON.stringify(metadata.project[key]) : (metadata.project[key] || '<em>none</em>')}
+                        </td>
+                    </tr>
+                `;
+            }
+        }).join('');
+
+        updatesHtml = `
+            <div style="margin: 25px 0; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px; background-color: #fff;">
+                <h4 style="margin-top: 0; margin-bottom: 5px; color: #0f172a; font-size: 16px;">Project Details</h4>
+                <p style="margin-top: 0; margin-bottom: 15px; color: #64748b; font-size: 12px; font-style: italic;">
+                    <span style="color: #ef4444; font-weight: bold;">*</span> means updated value
+                </p>
+                <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
+                    <thead>
+                        <tr>
+                            <th align="left" style="color: #0f172a; font-size: 14px; padding: 8px; border-bottom: 2px solid #e2e8f0; width: 35%;">Field</th>
+                            <th align="left" style="color: #0f172a; font-size: 14px; padding: 8px; border-bottom: 2px solid #e2e8f0;">Value</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${rows}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    }
+
+    return `
+        <div style="border-left: 4px solid #f59e0b; padding: 20px; background-color: #f8fafc; margin: 20px 0;">
+            <h3 style="color: #f59e0b; margin-top: 0; font-size: 20px;">Project Updated</h3>
+            <p style="color: #0f172a; font-size: 22px; font-weight: 800; margin: 10px 0;">${metadata.projectName || title}</p>
+            <p style="color: #334155; font-size: 16px; margin-bottom: 0;">${message}</p>
+        </div>
+        ${updatesHtml}
+        <div style="margin-top: 30px;">
+            <a href="${appUrl}/projects"
+               style="background-color: #0f172a; color: white; padding: 12px 25px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: 600;">
+                View Project
+            </a>
+        </div>
+    `;
+}
+
 // ─── Default / Generic ────────────────────────────────────────────────────────
 
 export function getDefaultContent(message: string): string {
@@ -258,27 +400,39 @@ export function getSpecializedContent(
     metadata: any,
     appUrl: string,
 ): string {
-    switch (type) {
-        case 'WELCOME':
-            return getWelcomeContent(title, message, metadata, appUrl);
+    require('fs').appendFileSync('debug-notification.log', `[${new Date().toISOString()}] getSpecializedContent: rendering type ${type}\n`);
+    try {
+        switch (type) {
+            case 'WELCOME':
+                return getWelcomeContent(title, message, metadata, appUrl);
 
-        case 'LEAVE_STATUS':
-            return getLeaveStatusContent(title, message, metadata, appUrl);
+            case 'LEAVE_STATUS':
+                return getLeaveStatusContent(title, message, metadata, appUrl);
 
-        case 'PAYROLL_GENERATED':
-        case 'PAYROLL_PAID':
-            return getPayrollContent(type as 'PAYROLL_GENERATED' | 'PAYROLL_PAID', title, message, metadata);
+            case 'PAYROLL_GENERATED':
+            case 'PAYROLL_PAID':
+                return getPayrollContent(type as 'PAYROLL_GENERATED' | 'PAYROLL_PAID', title, message, metadata);
 
-        case 'TASK_ASSIGNED':
-            return getTaskAssignedContent(title, message, metadata, appUrl);
+            case 'TASK_ASSIGNED':
+                return getTaskAssignedContent(title, message, metadata, appUrl);
 
-        case 'PROJECT_ASSIGNED':
-            return getProjectAssignedContent(title, message, metadata, appUrl);
+            case 'PROJECT_ASSIGNED':
+                return getProjectAssignedContent(title, message, metadata, appUrl);
 
-        case 'FINANCE_UPDATE':
-            return getFinanceUpdateContent(title, message, metadata, appUrl);
+            case 'PROJECT_CREATED':
+                return getProjectCreatedContent(title, message, metadata, appUrl);
 
-        default:
-            return getDefaultContent(message);
+            case 'PROJECT_UPDATED':
+                return getProjectUpdatedContent(title, message, metadata, appUrl);
+
+            case 'FINANCE_UPDATE':
+                return getFinanceUpdateContent(title, message, metadata, appUrl);
+
+            default:
+                return getDefaultContent(message);
+        }
+    } catch (e) {
+        require('fs').appendFileSync('debug-notification.log', `[${new Date().toISOString()}] getSpecializedContent crashed: ${e.message}\n${e.stack}\n`);
+        return getDefaultContent(message);
     }
 }

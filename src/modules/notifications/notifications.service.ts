@@ -92,27 +92,31 @@ export class NotificationsService implements OnModuleInit {
         const batch = this.firestore.batch();
         const timestamp = admin.firestore.FieldValue.serverTimestamp();
 
-        // Sanitize metadata to remove any undefined properties
-        const cleanMetadata = { ...metadata };
-        Object.keys(cleanMetadata).forEach(key => {
-            if (cleanMetadata[key] === undefined) {
-                delete cleanMetadata[key];
-            }
-        });
+        // Sanitize metadata to remove any undefined properties and strip custom prototypes (TypeORM entities)
+        let cleanMetadata = {};
+        try {
+            cleanMetadata = metadata ? JSON.parse(JSON.stringify(metadata)) : {};
+        } catch (e) {
+            this.logger.warn(`Failed to parse metadata for Firestore: ${e.message}`);
+        }
 
         userIds.forEach(userId => {
             if (!userId) return;
-            const docRef = this.firestore.collection('notifications').doc();
-            batch.set(docRef, {
-                userId,
-                title,
-                message,
-                read: false,
-                timestamp,
-                type: cleanMetadata?.type || 'system',
-                priority: cleanMetadata?.priority || 'medium',
-                ...cleanMetadata
-            });
+            try {
+                const docRef = this.firestore.collection('notifications').doc();
+                batch.set(docRef, {
+                    userId,
+                    title,
+                    message,
+                    read: false,
+                    timestamp,
+                    type: cleanMetadata['type'] || 'system',
+                    priority: cleanMetadata['priority'] || 'medium',
+                    ...cleanMetadata
+                });
+            } catch (e) {
+                this.logger.error(`[FirestoreSync] Failed to set batch doc for ${userId}: ${e.message}`);
+            }
         });
 
         try {
@@ -138,14 +142,19 @@ export class NotificationsService implements OnModuleInit {
             return;
         }
 
-        // FCM Data payload only supports string values
         const cleanMetadata: any = {};
         if (metadata) {
             Object.keys(metadata).forEach(key => {
+                if (key === 'project') return; // Skip heavy objects to prevent FCM payload limit (4KB) or circular JSON errors
+                
                 if (metadata[key] !== undefined && metadata[key] !== null) {
-                    cleanMetadata[key] = typeof metadata[key] === 'object' 
-                        ? JSON.stringify(metadata[key]) 
-                        : String(metadata[key]);
+                    try {
+                        cleanMetadata[key] = typeof metadata[key] === 'object' 
+                            ? JSON.stringify(metadata[key]) 
+                            : String(metadata[key]);
+                    } catch (e) {
+                        this.logger.warn(`Failed to stringify metadata key ${key} for FCM: ${e.message}`);
+                    }
                 }
             });
         }

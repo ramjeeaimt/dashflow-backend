@@ -40,7 +40,10 @@ export class ProjectsController {
   // Projects
   @Post()
   @CheckAbilities({ action: Action.Create, subject: 'project' })
-  createProject(@Body() data: any) {
+  createProject(@Body() data: any, @Request() req: any) {
+    if (req.user?.company?.id && !data.companyId) {
+      data.companyId = req.user.company.id;
+    }
     return this.projectsService.createProject(data);
   }
 
@@ -90,7 +93,10 @@ export class ProjectsController {
 
   @Put(':id')
   @CheckAbilities({ action: Action.Update, subject: 'project' })
-  updateProject(@Param('id') id: string, @Body() data: any) {
+  updateProject(@Param('id') id: string, @Body() data: any, @Request() req: any) {
+    if (req.user?.company?.id && !data.companyId) {
+      data.companyId = req.user.company.id;
+    }
     return this.projectsService.updateProject(id, data);
   }
 

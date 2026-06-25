@@ -1,4 +1,5 @@
 import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { LoggerMiddleware } from './common/middleware/logger.middleware';
@@ -177,6 +178,7 @@ import { EmailTemplatesModule } from './modules/email-templates/email-templates.
     JobsModule,
     WFHRequestsModule,
     EmailTemplatesModule,
+    EventEmitterModule.forRoot(),
   ],
 
   controllers: [AppController],

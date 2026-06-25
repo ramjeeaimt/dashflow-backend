@@ -6,10 +6,8 @@ import { CreateEmployeeDto, UpdateEmployeeDto } from './dto/employee.dto';
 
 import { UserService } from '../users/user.service';
 
-import { MailerService } from '@nestjs-modules/mailer';
 import { Company } from '../companies/company.entity';
-import { NotificationsService } from '../notifications/notifications.service';
-import { MailService } from '../mail/mail.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 @Injectable()
 export class EmployeeService {
@@ -19,9 +17,7 @@ export class EmployeeService {
     @InjectRepository(Company)
     private companyRepository: Repository<Company>,
     private userService: UserService,
-    private mailerService: MailerService,
-    private notificationsService: NotificationsService,
-    private mailService: MailService,
+    private eventEmitter: EventEmitter2,
   ) { }
 
   async create(
@@ -30,23 +26,43 @@ export class EmployeeService {
     let userId = createEmployeeDto.userId;
     const { roleIds, permissionIds, ...dto } = createEmployeeDto;
 
+    const employeeCodeUpper = dto.employeeCode ? dto.employeeCode.toUpperCase() : null;
+    if (!employeeCodeUpper) {
+      throw new ConflictException('Employee Code is required.');
+    }
+
+    // 🔥 Parallelize independent initial queries
+    const [existingCode, company, employeeRole] = await Promise.all([
+      this.employeeRepository.findOne({
+        where: { companyId: createEmployeeDto.companyId, employeeCode: employeeCodeUpper }
+      }),
+      this.companyRepository.findOne({
+        where: { id: createEmployeeDto.companyId }
+      }),
+      (roleIds && roleIds.length > 0) ? this.userService.findRoleByName('Employee') : Promise.resolve(null)
+    ]);
+
+    if (existingCode) {
+      throw new ConflictException(`Employee ID "${employeeCodeUpper}" is already in use.`);
+    }
+
+    let userObj: any = null;
+
     if (!userId && createEmployeeDto.email) {
-      const existingUser = await this.userService.findByEmail(
-        createEmployeeDto.email,
-      );
-      if (existingUser) {
+      userObj = await this.userService.findByEmail(createEmployeeDto.email);
+      if (userObj) {
         // Check if this user is already an employee in the same company
         const existingEmployee = await this.employeeRepository.findOne({
-          where: { userId: existingUser.id, companyId: createEmployeeDto.companyId },
+          where: { userId: userObj.id, companyId: createEmployeeDto.companyId },
         });
         if (existingEmployee) {
           throw new ConflictException(
             `An employee with the email "${createEmployeeDto.email}" already exists in this company.`,
           );
         }
-        userId = existingUser.id;
+        userId = userObj.id;
       } else {
-        const newUser = await this.userService.create({
+        userObj = await this.userService.create({
           email: createEmployeeDto.email,
           password: createEmployeeDto.password || 'welcome123',
           firstName: createEmployeeDto.firstName,
@@ -56,40 +72,43 @@ export class EmployeeService {
           avatar: createEmployeeDto.avatar,
           isActive: true,
         });
-        userId = newUser.id;
+        userId = userObj.id;
       }
     }
 
     if (!userId) {
-      throw new Error(
-        'User ID is required or sufficient details to create a user',
-      );
+      throw new Error('User ID is required or sufficient details to create a user');
     }
 
-    // Assign Roles
-    if (roleIds && roleIds.length > 0) {
-      const user = await this.userService.findById(userId);
-      if (user) {
-        if (roleIds) {
-          const employeeRole = await this.userService.findRoleByName('Employee');
-          const finalRoleIds = [...roleIds];
-          if (employeeRole && !finalRoleIds.includes(employeeRole.id)) {
-            finalRoleIds.push(employeeRole.id);
-          }
-          user.roles = await this.userService.findRolesByIds(finalRoleIds);
+    if (!userObj) {
+      userObj = await this.userService.findById(userId);
+    }
+
+    // Assign Roles and Permissions in parallel
+    const hasRoles = roleIds && roleIds.length > 0;
+    const hasPerms = permissionIds && permissionIds.length > 0;
+    if (userObj && (hasRoles || hasPerms)) {
+      const fetchRoles = async () => {
+        if (!hasRoles) return null;
+        const finalRoleIds = [...roleIds];
+        if (employeeRole && !finalRoleIds.includes(employeeRole.id)) {
+          finalRoleIds.push(employeeRole.id);
         }
-        if (permissionIds) {
-          user.permissions = await this.userService.findPermissionsByIds(permissionIds);
-        }
-        await this.userService.saveUser(user);
-      }
-    } else if (permissionIds && permissionIds.length > 0) {
-      const user = await this.userService.findById(userId);
-      if (user) {
-        user.permissions = await this.userService.findPermissionsByIds(permissionIds);
-        await this.userService.saveUser(user);
-      }
-    } else {
+        return this.userService.findRolesByIds(finalRoleIds);
+      };
+
+      const fetchPerms = async () => {
+        if (!hasPerms) return null;
+        return this.userService.findPermissionsByIds(permissionIds);
+      };
+
+      const [roles, perms] = await Promise.all([fetchRoles(), fetchPerms()]);
+
+      if (roles) userObj.roles = roles;
+      if (perms) userObj.permissions = perms;
+
+      await this.userService.saveUser(userObj);
+    } else if (!hasRoles && !hasPerms) {
       // Default to Employee role if no roles/permissions provided
       await this.userService.assignRole(userId, 'Employee');
     }
@@ -100,51 +119,25 @@ export class EmployeeService {
     const employee = this.employeeRepository.create({
       ...dto,
       userId,
+      employeeCode: employeeCodeUpper,
     });
-
-    if (!dto.employeeCode) {
-      throw new ConflictException('Employee Code is required.');
-    }
-
-    const employeeCodeUpper = dto.employeeCode.toUpperCase();
-
-    // Validate uniqueness inside the company
-    const existingCode = await this.employeeRepository.findOne({
-      where: { companyId: createEmployeeDto.companyId, employeeCode: employeeCodeUpper }
-    });
-
-    if (existingCode) {
-      throw new ConflictException(`Employee ID "${employeeCodeUpper}" is already in use by another employee in this company.`);
-    }
-
-    employee.employeeCode = employeeCodeUpper;
 
     const savedEmployee = await this.employeeRepository.save(employee);
 
-    // Get company details for the email
-    const company = await this.companyRepository.findOne({
-      where: { id: savedEmployee.companyId },
-    });
-
-    // 🔥 Real-time Notification & Unified Welcome Email
+    // 🔥 Dispatch real-time notification & unified welcome email in background
     try {
-      await this.notificationsService.send({
-        title: 'Welcome to the Team!',
-        message: `Hello ${createEmployeeDto.firstName}, congratulations! You have been successfully added as an employee to ${company?.name || 'Difmo'}. We are excited to have you on board.`,
-        type: 'both',
-        recipientFilter: 'employees',
-        recipientIds: [userId],
+      this.eventEmitter.emit('employee.created', {
+        employeeId: savedEmployee.id,
+        userId: userId,
+        email: createEmployeeDto.email,
+        firstName: createEmployeeDto.firstName,
+        lastName: createEmployeeDto.lastName,
         companyId: savedEmployee.companyId,
-        metadata: {
-          type: 'WELCOME',
-          employeeId: savedEmployee.id,
-          email: createEmployeeDto.email,
-          companyName: company?.name || 'Difmo',
-          password: createEmployeeDto.password || 'welcome123',
-        }
+        companyName: company?.name || 'Difmo',
+        password: createEmployeeDto.password,
       });
     } catch (err) {
-      console.error('[EmployeeService] Failed to send welcome notification/email:', err.message);
+      console.error('[EmployeeService] Failed to emit employee.created event:', err.message);
     }
 
     return savedEmployee;
@@ -394,22 +387,16 @@ export class EmployeeService {
             // Trigger role-assignment notification if roles were changed
             if (roleIds && user.email && isRolesChanged) {
               const roleNames = user.roles.map(r => r.name);
-              console.log(`[EmployeeService] Roles updated for ${user.email}. Sending notification...`);
+              console.log(`[EmployeeService] Roles updated for ${user.email}. Emitting event...`);
               
-              await this.mailService.sendRoleAssignmentNotification(user.email, {
-                employeeName: `${user.firstName || ''} ${user.lastName || ''}`.trim(),
-                roles: roleNames
-              }).catch(err => console.error('[EmployeeService] Role notification failed:', err.message));
-
-              this.notificationsService.send({
-                title: 'Role Updated',
-                message: `Your account roles have been updated to: ${roleNames.join(', ')}.`,
-                type: 'push',
-                recipientFilter: 'custom',
-                recipientIds: [user.id],
+              this.eventEmitter.emit('employee.roles.updated', {
+                userId: user.id,
+                email: user.email,
+                firstName: user.firstName,
+                lastName: user.lastName,
                 companyId: employee.companyId || '',
-                metadata: { type: 'role_update', severity: 'info' }
-              }).catch(err => console.error('[EmployeeService] Role FCM failed:', err));
+                roles: roleNames,
+              });
             }
           }
         }
