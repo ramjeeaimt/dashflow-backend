@@ -5,6 +5,7 @@ import {
   IsDateString,
   IsArray,
   IsNotEmpty,
+  IsBoolean,
 } from 'class-validator';
 
 export class CreateEmployeeDto {
@@ -74,6 +75,7 @@ export class CreateEmployeeDto {
   @IsOptional()
   employeeType?: string;
 
+  @IsBoolean()
   @IsOptional()
   workFromHome?: boolean;
 
@@ -162,6 +164,14 @@ export class UpdateEmployeeDto {
   @IsString()
   @IsOptional()
   employmentType?: string;
+
+  @IsString()
+  @IsOptional()
+  employeeType?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  workFromHome?: boolean;
 
   @IsString()
   @IsOptional()

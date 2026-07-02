@@ -322,6 +322,8 @@ export class EmployeeService {
         'startTime',
         'endTime',
         'checkInTime',
+        'workFromHome',
+        'employeeType',
       ];
 
       validFields.forEach((field) => {
