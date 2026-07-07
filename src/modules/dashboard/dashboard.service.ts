@@ -29,29 +29,16 @@ export class DashboardService {
     // Use IST today string to match attendance date logic
     const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
     
-    let employeesPromise;
-    let attendanceTodayPromise;
-    let tasksPromise;
-
-    // Always fetch company-wide attendance for the "Present Today" count
-    attendanceTodayPromise = this.attendanceService.findAll({
-        companyId,
-        startDate: today,
-        endDate: today,
-    });
-
-    if (userId) {
-        employeesPromise = this.employeeService.findAll({ companyId });
-        tasksPromise = this.projectsService.findAllTasksByCompany(companyId);
-    } else {
-        employeesPromise = this.employeeService.findAll({ companyId });
-        tasksPromise = this.projectsService.findAllTasksByCompany(companyId);
-    }
-
-    const [employees, attendanceToday, tasks] = await Promise.all([
-        employeesPromise,
-        attendanceTodayPromise,
-        tasksPromise
+    const [totalEmployees, attendanceToday, tasks] = await Promise.all([
+        // COUNT instead of hydrating every employee row — only the total is used
+        this.employeeService.countByCompany(companyId),
+        // Company-wide attendance for the "Present Today" count
+        this.attendanceService.findAll({
+            companyId,
+            startDate: today,
+            endDate: today,
+        }),
+        this.projectsService.findAllTasksByCompany(companyId),
     ]);
 
     let displayTasks = tasks;
@@ -70,13 +57,13 @@ export class DashboardService {
     };
 
     // Calculate individual status if userId is provided
-    let userAttendance = null;
+    let userAttendance: { status?: string } | null = null;
     if (userId) {
-        userAttendance = attendanceToday.find(a => a.employee?.userId === userId || a.employeeId === userId);
+        userAttendance = attendanceToday.find(a => a.employee?.userId === userId || a.employeeId === userId) ?? null;
     }
 
     return {
-      totalEmployees: employees.length,
+      totalEmployees,
       presentToday: attendanceToday.length,
       attendanceBreakdown,
       userStatus: userAttendance ? (userAttendance as any).status : 'absent',
@@ -93,22 +80,22 @@ export class DashboardService {
       return d;
     }).reverse();
 
-    const tasks = await this.projectsService.findAllTasksByCompany(companyId);
+    const rangeStart = last7Days[0].toISOString().split('T')[0];
+    const rangeEnd = last7Days[last7Days.length - 1].toISOString().split('T')[0];
 
-    const attendanceData = await Promise.all(
-      last7Days.map(async (date) => {
-        const dateStr = date.toISOString().split('T')[0];
-        const dailyAttendance = await this.attendanceService.findAll({
-          companyId,
-          startDate: dateStr,
-          endDate: dateStr,
-        });
-        return {
-          date: date.toLocaleDateString('en-US', { weekday: 'short' }),
-          present: dailyAttendance.length,
-        };
-      }),
-    );
+    // One grouped COUNT query for the whole week instead of 7 full-join loads
+    const [tasks, presentByDate] = await Promise.all([
+      this.projectsService.findAllTasksByCompany(companyId),
+      this.attendanceService.countByDate(companyId, rangeStart, rangeEnd),
+    ]);
+
+    const attendanceData = last7Days.map((date) => {
+      const dateStr = date.toISOString().split('T')[0];
+      return {
+        date: date.toLocaleDateString('en-US', { weekday: 'short' }),
+        present: presentByDate[dateStr] || 0,
+      };
+    });
 
     const productivityData = last7Days.map((date) => {
       const dateStr = date.toISOString().split('T')[0];
@@ -130,16 +117,16 @@ export class DashboardService {
   }
 
   async getFeedData(companyId: string, userId?: string) {
-    // 1. Fetch live records from DB for company-specific activities
-    const [employees, allLeaves, tasks, auditLogs] = await Promise.all([
+    // 1. Fetch live records from DB for company-specific activities.
+    // Leaves and audit logs are scoped to the company IN SQL — previously every
+    // company's rows were loaded and filtered in JS (and the audit filter never
+    // matched because user.company wasn't loaded).
+    const [employees, companyLeaves, tasks, auditLogs] = await Promise.all([
       this.employeeService.findAll({ companyId }),
-      this.leavesService.findAll({}),
+      this.leavesService.findAll({ companyId }),
       this.projectsService.findAllTasksByCompany(companyId),
-      this.auditLogService.findAll(),
+      this.auditLogService.findRecentForCompany(companyId, 50),
     ]);
-
-    // Filter leaves for this company
-    const companyLeaves = allLeaves.filter(l => l.employee?.companyId === companyId);
 
     // Map Employees
     const employeeActivities = employees.map(emp => {
@@ -172,9 +159,8 @@ export class DashboardService {
       createdAt: new Date(task.createdAt || new Date()),
     }));
 
-    // Map Audit Logs
+    // Map Audit Logs (already company-scoped in SQL)
     const auditActivities = auditLogs
-      .filter(log => log.user?.company?.id === companyId)
       .map(log => ({
         id: `audit-${log.id}`,
         type: log.action.toLowerCase().includes('task') ? 'task' : 
@@ -200,10 +186,11 @@ export class DashboardService {
       time: this.getRelativeTime(act.createdAt),
     }));
 
-    // 💡 Personalization: For admins, show pending. For employees, show their approved ones.
-    const pendingLeaves = userId 
-        ? await this.leavesService.findAll({ employeeId: undefined, status: 'APPROVED' }) // need filter by userId/employeeId
-        : await this.leavesService.findAll({ status: 'PENDING' });
+    // 💡 Personalization: pending approvals are only rendered for admins, so the
+    // query is skipped entirely for the employee view (its result was unused).
+    const pendingLeaves = userId
+        ? []
+        : await this.leavesService.findAll({ status: 'PENDING', companyId });
 
     const upcomingEvents = tasks
       .filter((t: any) => {
@@ -222,10 +209,10 @@ export class DashboardService {
 
     // Add approved leaves to upcoming events if it's for an employee
     if (userId) {
-        // We'll refine the filter to only this user's leaves once the service supports it properly
-        const userLeaves = await this.leavesService.findAll({ status: 'APPROVED' });
-        const myLeaves = userLeaves.filter(l => l.employee?.userId === userId);
-        
+        // employeeId filter resolves to employee.userId in the leaves query —
+        // same predicate the old JS filter applied, now done in SQL
+        const myLeaves = await this.leavesService.findAll({ status: 'APPROVED', employeeId: userId });
+
         myLeaves.forEach(l => {
             upcomingEvents.push({
                 id: l.id,

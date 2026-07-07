@@ -409,10 +409,25 @@ export class FinanceService {
     let totalDeduction = 0;
     let payrolls: any[] = [];
 
+    // Bulk prefetch (2 queries) instead of 2 queries per employee. Month/year
+    // filtering of attendance stays in JS below — identical results to before.
+    const employeeIds = employees.map((e) => e.id);
+    const [existingPayrolls, allAttendance] = employeeIds.length
+      ? await Promise.all([
+          this.payrollRepository.find({ where: { employeeId: In(employeeIds), month, year } }),
+          this.attendanceRepository.find({ where: { employeeId: In(employeeIds) } }),
+        ])
+      : [[], []];
+    const payrollByEmployee = new Map(existingPayrolls.map((p) => [p.employeeId, p]));
+    const attendanceByEmployee = new Map<string, typeof allAttendance>();
+    for (const att of allAttendance) {
+      const list = attendanceByEmployee.get(att.employeeId);
+      if (list) list.push(att);
+      else attendanceByEmployee.set(att.employeeId, [att]);
+    }
+
     for (const emp of employees) {
-      const existing = await this.payrollRepository.findOne({
-        where: { employeeId: emp.id, month, year },
-      });
+      const existing = payrollByEmployee.get(emp.id);
       if (existing) {
         if (existing.status === 'sent' || existing.status === 'paid') {
           continue; // Skip if already finalized
@@ -425,10 +440,8 @@ export class FinanceService {
         }
       }
 
-      // Get attendance for this employee for the month
-      const attendance = await this.attendanceRepository.find({
-        where: { employeeId: emp.id },
-      });
+      // Attendance for this employee (month filter applied in the loop below)
+      const attendance = attendanceByEmployee.get(emp.id) ?? [];
 
       let presentDays = 0;
       let halfDays = 0;

@@ -7,6 +7,13 @@ paths:
       responses:
         "200":
           description: ""
+  /api/health:
+    get:
+      operationId: AppController_health
+      parameters: []
+      responses:
+        "200":
+          description: ""
   /api/auth/login:
     post:
       operationId: AuthController_login

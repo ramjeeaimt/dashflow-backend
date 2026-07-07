@@ -581,6 +581,31 @@ export class AttendanceService {
     return this.attendanceRepository.save(attendance);
   }
 
+  // Present-count per day in one grouped query — for dashboard charts.
+  // Returns a map of 'YYYY-MM-DD' -> count.
+  async countByDate(
+    companyId: string,
+    startDate: string,
+    endDate: string,
+  ): Promise<Record<string, number>> {
+    const rows: { date: string; count: string }[] = await this.attendanceRepository
+      .createQueryBuilder('attendance')
+      .innerJoin('attendance.employee', 'employee')
+      .select('attendance.date', 'date')
+      .addSelect('COUNT(*)', 'count')
+      .where('employee.companyId = :companyId', { companyId })
+      .andWhere('attendance.date BETWEEN :startDate AND :endDate', { startDate, endDate })
+      .groupBy('attendance.date')
+      .getRawMany();
+
+    const counts: Record<string, number> = {};
+    for (const row of rows) {
+      const key = String(row.date).slice(0, 10);
+      counts[key] = parseInt(row.count, 10);
+    }
+    return counts;
+  }
+
   async findAll(filters?: any): Promise<Attendance[]> {
     const query = this.attendanceRepository
       .createQueryBuilder('attendance')

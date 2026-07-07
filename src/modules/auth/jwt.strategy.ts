@@ -3,9 +3,24 @@ import { PassportStrategy } from '@nestjs/passport';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { UserService } from '../users/user.service';
+import { User } from '../users/user.entity';
+
+interface CachedUser {
+  user: User;
+  expiresAt: number;
+}
+
+// Resolving the user (6-relation join) on EVERY request dominates API latency.
+// A short TTL cache bounds staleness: role/permission changes take at most
+// AUTH_USER_CACHE_TTL_MS (default 30s) to propagate to already-issued tokens.
+const DEFAULT_TTL_MS = 30_000;
+const MAX_CACHE_ENTRIES = 5_000;
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
+  private readonly userCache = new Map<string, CachedUser>();
+  private readonly ttlMs: number;
+
   constructor(
     configService: ConfigService,
     private userService: UserService,
@@ -15,12 +30,27 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       ignoreExpiration: false,
       secretOrKey: configService.get<string>('JWT_SECRET') || 'defaultSecret',
     });
+    this.ttlMs = parseInt(
+      configService.get<string>('AUTH_USER_CACHE_TTL_MS') ?? `${DEFAULT_TTL_MS}`,
+      10,
+    );
   }
 
   async validate(payload: any) {
+    // Key includes companyId so each active-workspace variant is cached separately
+    const cacheKey = `${payload.sub}:${payload.companyId ?? ''}`;
+
+    if (this.ttlMs > 0) {
+      const cached = this.userCache.get(cacheKey);
+      if (cached && cached.expiresAt > Date.now()) {
+        return cached.user;
+      }
+    }
+
     // Fetch full user with roles and permissions for CASL
     const user = await this.userService.findById(payload.sub);
     if (!user) {
+      this.userCache.delete(cacheKey);
       return null;
     }
 
@@ -36,6 +66,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
           user.companies.push(originalPrimary);
         }
       }
+    }
+
+    if (this.ttlMs > 0) {
+      if (this.userCache.size >= MAX_CACHE_ENTRIES) {
+        this.userCache.clear(); // simple bound; rebuilt within one TTL window
+      }
+      this.userCache.set(cacheKey, { user, expiresAt: Date.now() + this.ttlMs });
     }
 
     return user;

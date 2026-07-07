@@ -123,7 +123,10 @@ import { EmailTemplatesModule } from './modules/email-templates/email-templates.
             type: 'postgres',
             url: dbUrl,
             entities,
-            synchronize: configService.get<string>('DB_SYNCHRONIZE') === 'true' || env === 'development',
+            // Auto-sync only outside production; prod schema changes must go through migrations
+            synchronize:
+              env !== 'production' &&
+              (configService.get<string>('DB_SYNCHRONIZE') === 'true' || env === 'development'),
             ssl: {
               rejectUnauthorized: false,
             },

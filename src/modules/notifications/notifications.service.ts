@@ -131,11 +131,11 @@ export class NotificationsService implements OnModuleInit {
     // ─── FCM Push Notifications ──────────────────────────────────────────────────
 
     private async sendPushNotifications(userIds: string[], title: string, message: string, metadata: any = {}) {
-        const tokens: string[] = [];
-        for (const userId of userIds) {
-            const userTokens = await this.getUserFcmTokens(userId);
-            tokens.push(...userTokens.map(t => t.token));
-        }
+        // One IN() query for all recipients instead of one query per user
+        const userTokens = userIds.length
+            ? await this.fcmTokenRepo.find({ where: { userId: In(userIds) } })
+            : [];
+        const tokens: string[] = userTokens.map(t => t.token);
 
         if (tokens.length === 0) {
             this.logger.debug('No FCM tokens found for the targeted users. Skipping push notification.');
