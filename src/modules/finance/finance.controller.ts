@@ -19,6 +19,39 @@ import { CheckAbilities } from '../access-control/abilities.decorator';
 import { Action } from '../access-control/ability.factory';
 import type { Response } from 'express';
 import { Attendance } from '../attendance/attendance.entity';
+import { ForbiddenException } from '@nestjs/common';
+
+// Case-insensitive so DB role casing (e.g. 'ADMIN', 'HR Manager') still matches.
+const MANAGEMENT_ROLES = ['admin', 'super admin', 'manager', 'hr manager'];
+const SUPER_ADMIN_EMAILS = ['admin@difmo.com', 'info@difmo.com', 'hello@system.com'];
+
+/**
+ * A payroll-privileged user may read the WHOLE company's payroll (all employees,
+ * including drafts). This is any admin/manager: a super-admin email, a management
+ * role (case-insensitive), or a payroll permission stronger than plain `read`
+ * (manage/create/update/delete, or on resource `all`). A plain employee who only
+ * has `read payroll` is NOT privileged and is scoped to their own finalized slips.
+ */
+function isPayrollPrivileged(user: any): boolean {
+  if (!user) return false;
+  if (SUPER_ADMIN_EMAILS.includes((user.email || '').toLowerCase())) return true;
+
+  const roles = user.roles || [];
+  if (roles.some((r: any) => MANAGEMENT_ROLES.includes((r?.name || '').toLowerCase()))) {
+    return true;
+  }
+
+  // Consider BOTH direct user permissions and permissions inherited from roles.
+  // (`user.permissions` is only the direct many-to-many; role grants live on
+  // `user.roles[].permissions`, which is where an Admin's payroll rights sit.)
+  const rolePerms = roles.flatMap((r: any) => r?.permissions || []);
+  const perms = [...(user.permissions || []), ...rolePerms];
+  return perms.some(
+    (p: any) =>
+      (p.resource === 'payroll' || p.resource === 'all') &&
+      ['manage', 'create', 'update', 'delete'].includes((p.action || '').toLowerCase()),
+  );
+}
 
 @Controller('finance')
 @UseGuards(JwtAuthGuard, AbilitiesGuard)
@@ -45,22 +78,39 @@ export class FinanceController {
   @CheckAbilities({ action: Action.Read, subject: 'payroll' })
   findAllPayroll(
     @Query('employeeId') employeeId?: string,
-    @Query('companyId') companyId?: string, // 👈 Admin ke liye ye add kiya
+    @Query('companyId') companyId?: string,
     @Query('month') month?: number,
     @Query('year') year?: number,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
     @Request() req?: any
   ) {
     const user = req.user;
     const isSuperAdmin = ['admin@difmo.com', 'info@difmo.com', 'hello@system.com'].includes(user.email);
-    const finalCompanyId = (!isSuperAdmin && user.company?.id) ? user.company.id : companyId;
 
-    // LOGIC: Agar na employeeId hai na companyId, toh logged-in user (Employee) ka data dikhao
+    // Only privileged callers may read the whole company's payroll. A plain
+    // employee (has `read payroll` but not manage/create/update) is hard-scoped
+    // to their OWN records and only finalized (sent/paid) payslips — they can
+    // never enumerate the company via companyId. This closes the data-exposure
+    // hole where any employee could read every salary.
+    const privileged = isPayrollPrivileged(user) || isSuperAdmin;
+
+    if (!privileged) {
+      return this.financeService.findAllPayroll(
+        user.id,               // resolves to their employee record by userId
+        month,
+        year,
+        undefined,             // ignore any companyId the client supplied
+        { page, limit, finalizedOnly: true },
+      );
+    }
+
+    const finalCompanyId = (!isSuperAdmin && user.company?.id) ? user.company.id : companyId;
     if (!employeeId && !finalCompanyId) {
       employeeId = req.user.employeeId || req.user.id;
     }
 
-    // Ab service ko 4 arguments bhejo
-    return this.financeService.findAllPayroll(employeeId, month, year, finalCompanyId);
+    return this.financeService.findAllPayroll(employeeId, month, year, finalCompanyId, { page, limit });
   }
 
 
@@ -98,8 +148,19 @@ export class FinanceController {
   @Get('payroll/:id/slip')
   async getPayrollSlip(
     @Param('id') payrollId: string,
+    @Request() req: any,
     @Res({ passthrough: false }) res: Response
   ) {
+    // A payslip PDF is viewable only by a payroll-privileged user or the
+    // employee who owns it (and only once finalized).
+    const user = req.user;
+    if (!isPayrollPrivileged(user)) {
+      const owned = await this.financeService.isPayrollOwnedBy(payrollId, user.id);
+      if (!owned) {
+        throw new ForbiddenException('You can only view your own payslip.');
+      }
+    }
+
     const pdfBuffer = await this.financeService.generatePayrollSlip(payrollId);
 
     res.set({

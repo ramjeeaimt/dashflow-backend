@@ -179,6 +179,7 @@ export class FinanceService {
     month?: number,
     year?: number,
     companyId?: string,
+    opts?: { page?: number; limit?: number; finalizedOnly?: boolean },
   ): Promise<Payroll[]> {
 
     const query = this.payrollRepository.createQueryBuilder('payroll')
@@ -204,6 +205,13 @@ export class FinanceService {
 
       const finalId = employee ? employee.id : employeeId;
       query.andWhere('payroll.employeeId = :employeeId', { employeeId: finalId });
+    }
+
+    // Employees only see finalized payslips (sent or paid), never drafts.
+    if (opts?.finalizedOnly) {
+      query.andWhere('payroll.status IN (:...finalStatuses)', {
+        finalStatuses: ['sent', 'paid'],
+      });
     }
 
     // 4. Month & Year Filters
@@ -258,7 +266,35 @@ export class FinanceService {
       console.error('[FinanceService] Failed to calculate yearly leaves:', err);
     }
 
-    return uniquePayrolls;
+    // Strip sensitive credential fields that ride along on the nested user
+    // relation — these must never leave the server.
+    const sanitized = uniquePayrolls.map((p) => {
+      const u = (p as any).employee?.user;
+      if (u) {
+        delete u.password;
+        delete u.resetPasswordOtp;
+        delete u.resetPasswordOtpExpires;
+      }
+      return p;
+    });
+
+    // Optional in-memory pagination (after de-dup so page counts are stable).
+    const page = Number(opts?.page);
+    const limit = Number(opts?.limit);
+    if (page > 0 && limit > 0) {
+      const start = (page - 1) * limit;
+      return sanitized.slice(start, start + limit);
+    }
+
+    return sanitized;
+  }
+
+  /** True if the given payroll belongs to the employee behind this user id. */
+  async isPayrollOwnedBy(payrollId: string, userId: string): Promise<boolean> {
+    const employee = await this.employeeRepository.findOne({ where: { userId } });
+    if (!employee) return false;
+    const payroll = await this.payrollRepository.findOne({ where: { id: payrollId } });
+    return !!payroll && payroll.employeeId === employee.id;
   }
 
   async findEmployeeByUserId(userId: string) {

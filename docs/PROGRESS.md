@@ -29,6 +29,21 @@
 
 ## Session log
 
+### 2026-07-07 (security fixes + features) — verified against live DB
+- **Payroll exposure (CRITICAL) FIXED**: non-privileged callers hard-scoped to own +
+  finalized records in `finance.controller.ts`; `user.password`/OTP stripped in
+  `finance.service.findAllPayroll`; payslip PDF endpoint now checks ownership
+  (`isPayrollOwnedBy`). Added `isPayrollPrivileged` helper (role- or permission-based,
+  not hardcoded emails).
+- **Access-control unguarded (HIGH) FIXED**: `AbilitiesGuard` + `CheckAbilities` on every
+  `/access-control/*` route.
+- **Pagination**: payroll endpoint accepts `page`/`limit` (in-memory slice after de-dup).
+- Retested with real admin+employee creds: employee payroll scoped to self+sent, no
+  password leak, `/roles` 403; admin unaffected; cross-employee payslip 403.
+- Root cause noted for follow-up: `ability.factory.ts` grants `can(Read,'payroll')` to
+  EVERY user unconditionally — controller scoping now defends against it, but the factory
+  grant should be tightened to `{ employeeId: user.id }` too (defense in depth).
+
 ### 2026-07-07 (later) — Response-time optimization pass (Claude session)
 Same business logic, fewer/lighter queries:
 - **JWT strategy**: per-request 6-relation user lookup now cached in-memory for

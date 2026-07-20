@@ -13,7 +13,7 @@ When you verify a row, note the date and how it was tested.
 | Company registration (creates company + admin user) | 🟡 | | |
 | Login → JWT issued with roles/permissions | ✅ | 2026-07-07 API test | admin + employee login return token + roles + permissions; wrong password → 401 "Invalid email or password" |
 | Multi-company switch (re-issues JWT for company) | ✅ | 2026-07-07 API test | `/auth/my-workspaces` returns workspaces; profile carries company |
-| Role & permission read (access-control) | 🔴 | 2026-07-07 API test | **SECURITY: `/access-control/*` has only JwtAuthGuard — NO ability check.** Any authenticated employee reads `/roles` + `/permissions`; POST create endpoints appear equally unguarded (privilege-escalation risk). Add AbilitiesGuard + CheckAbilities. |
+| Role & permission read (access-control) | ✅ FIXED | 2026-07-07 fix+retest | Added `AbilitiesGuard` + `CheckAbilities` to all `/access-control/*` routes (read → `read access-control`, writes → `manage access-control`). Retest: employee `/roles` & `/permissions` now **403**; admin still 200. |
 | Admin bypass | 🔴 | | Hardcoded email list on the FRONTEND only — server must be authority. Also still hardcoded in `finance.controller.ts`. |
 | Password reset / change | 🟡 | | seed scripts exist; confirm user-facing flow |
 
@@ -42,7 +42,9 @@ When you verify a row, note the date and how it was tested.
 
 | Flow | Status | Verified on | Notes |
 |---|---|---|---|
-| Payroll list / read | 🔴 | 2026-07-07 API test | **CRITICAL SECURITY: `/finance/payroll?companyId=X` returns ALL company payroll to a regular employee** — every salary, PLUS bcrypt password hashes and full company config leaking through nested `employee.user` / `employee.company`. Root cause: (a) Employee role granted `read payroll`; (b) endpoint doesn't scope an employee to own records when companyId passed; (c) payroll serialization doesn't strip `user.password`. |
+| Payroll list / read (access control) | ✅ FIXED | 2026-07-07 fix+retest | Non-privileged callers are now hard-scoped to their OWN records + finalized (sent/paid) only, `companyId` ignored; `user.password`/OTP stripped from all payroll responses (admin too). Retest: employee sees 10 rows, 1 distinct employee (self), statuses={sent}, **PASSWORD_LEAK=False**; admin sees 24 rows, PASSWORD_LEAK=False. |
+| Payslip PDF access (`/payroll/:id/slip`) | ✅ FIXED | 2026-07-07 fix+retest | Was unauthenticated-by-ownership. Now only a payroll-privileged user or the owning employee can fetch. Retest: employee OWN slip 200 (1 MB PDF), OTHER employee's slip **403**, admin any slip 200. |
+| Employee sees finalized payslip on dashboard | ✅ | 2026-07-07 | Employee dashboard now shows latest sent/paid payslip (net pay + status) with link to full list; drafts never shown (backend filters). |
 | Payroll generation (salary computation) | 🟡 | | not exercised on live DB (would mutate real payroll); code-optimized this session (bulk queries) — needs number-parity check |
 | Payslip PDF generation + email | 🟡 | | recent commits touched this ("payslip email update") |
 | Expense recording & approval | ✅ (authz) | 2026-07-07 API test | employee correctly DENIED read (403 "Cannot execute read on expense"); admin read 200 (9 rows) |
