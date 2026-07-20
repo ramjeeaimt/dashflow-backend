@@ -242,6 +242,7 @@ export class AttendanceService {
     let isLate = false;
     let onApprovedWFH = false;
     let resolvedEmployee: Employee | null = null;
+    let targetTime = '10:00';
 
     try {
       resolvedEmployee = await this.employeeService.findOne(checkInDto.employeeId);
@@ -249,7 +250,7 @@ export class AttendanceService {
 
       onApprovedWFH = await this.wfhRequestsService.isEmployeeOnWFH(resolvedEmployee.id, today);
 
-      const targetTime =
+      targetTime =
         resolvedEmployee.startTime ||
         resolvedEmployee.checkInTime ||
         resolvedEmployee.company?.openingTime ||
@@ -332,46 +333,50 @@ export class AttendanceService {
           }).catch(err => console.error('[AttendanceService] FCM Check-In Employee failed:', err));
         }
 
-        // // Send check-in email to Employee (Disabled per policy: no email during check-in)
-        // this.mailService.sendCheckInEmail(employee.user.email, {
-        //   employeeName: empName,
-        //   time: saved.checkInTime,
-        //   status: saved.status,
-        //   date: today,
-        //   ...companyCtx,
-        // }).catch(err => console.error('[AttendanceService] Check-In email failed:', err));
+        // Send check-in email to Employee
+        if (company?.enableCheckInEmailAlert !== false) {
+          this.mailService.sendCheckInEmail(employee.user.email, {
+            employeeName: empName,
+            time: saved.checkInTime,
+            status: saved.status,
+            date: today,
+            ...companyCtx,
+          }).catch(err => console.error('[AttendanceService] Check-In email failed:', err));
+        }
 
-        // // Send late warning email if applicable (Disabled per policy: no email during check-in)
-        // if (isLate && (company?.enableLateEmailAlert !== false)) {
-        //   this.mailService.sendLateWarningEmail(employee.user.email, {
-        //     employeeName: empName,
-        //     checkInTime: saved.checkInTime,
-        //     scheduledTime: employee.startTime || employee.checkInTime || company?.openingTime || '',
-        //     date: today,
-        //     ...companyCtx,
-        //   }).catch(err => console.error('[AttendanceService] Late warning email failed:', err));
-        // }
+        // Send late warning email if applicable
+        if (isLate && (company?.enableLateEmailAlert !== false)) {
+          this.mailService.sendLateWarningEmail(employee.user.email, {
+            employeeName: empName,
+            checkInTime: saved.checkInTime,
+            scheduledTime: employee.startTime || employee.checkInTime || company?.openingTime || '',
+            date: today,
+            ...companyCtx,
+          }).catch(err => console.error('[AttendanceService] Late warning email failed:', err));
+        }
 
-        // Notify Admins of Check-in (FCM only, no email)
+        // Notify Admins of Check-in (Email + FCM)
         this.getAdminEmails(employee).then(admins => {
           const statusLabel = saved.status === 'late' ? 'Arrived Late' : 'Checked In';
 
-          // // Send Email to Admins (Disabled per policy)
-          // admins.forEach(adminEmail => {
-          //   this.mailService.sendAdminAttendanceAlert(adminEmail, {
-          //     alertTitle: `Employee ${statusLabel}`,
-          //     bannerClass,
-          //     introText: `${empName} has registered a check-in at ${saved.checkInTime} on ${today}.`,
-          //     employeeName: empName,
-          //     date: today,
-          //     timeLabel: 'Check-In Time',
-          //     timeValue: saved.checkInTime,
-          //     scheduledTime: scheduledTimeStr,
-          //     status: saved.status,
-          //     isLate: saved.status === 'late',
-          //     ...companyCtx,
-          //   }).catch(err => console.error(`[AttendanceService] Admin check-in email alert failed for ${adminEmail}:`, err));
-          // });
+          // Send Email to Admins
+          if (company?.enableCheckInEmailAlert !== false) {
+            admins.forEach(adminEmail => {
+              this.mailService.sendAdminAttendanceAlert(adminEmail, {
+                alertTitle: `Employee ${statusLabel}`,
+                bannerClass: 'checkin',
+                introText: `${empName} has registered a check-in at ${saved.checkInTime} on ${today}.`,
+                employeeName: empName,
+                date: today,
+                timeLabel: 'Check-In Time',
+                timeValue: saved.checkInTime,
+                scheduledTime: targetTime,
+                status: saved.status,
+                isLate: saved.status === 'late',
+                ...companyCtx,
+              }).catch(err => console.error(`[AttendanceService] Admin check-in email alert failed for ${adminEmail}:`, err));
+            });
+          }
 
           // Send FCM to Admins
           this.notificationsService.send({
@@ -506,15 +511,17 @@ export class AttendanceService {
 
       const formattedTime = this.formatTo12Hour(saved.checkOutTime);
       const formattedCheckInTime = this.formatTo12Hour(saved.checkInTime);
-      this.mailService.sendCheckOutEmail(employee.user.email, {
-        employeeName: empName,
-        checkInTime: formattedCheckInTime,
-        time: saved.checkOutTime,
-        date: saved.date as any,
-        workHours: saved.workHours || 0,
-        overtime: saved.overtime || 0,
-        ...companyCtx,
-      }).catch(err => console.error('[AttendanceService] Check-out email failed:', err));
+      if (co?.enableCheckOutEmailAlert !== false) {
+        this.mailService.sendCheckOutEmail(employee.user.email, {
+          employeeName: empName,
+          checkInTime: formattedCheckInTime,
+          time: saved.checkOutTime,
+          date: saved.date as any,
+          workHours: saved.workHours || 0,
+          overtime: saved.overtime || 0,
+          ...companyCtx,
+        }).catch(err => console.error('[AttendanceService] Check-out email failed:', err));
+      }
 
       // Add FCM for Employee Checkout
       this.notificationsService.send({
@@ -530,22 +537,24 @@ export class AttendanceService {
       // Notify Admins of Check-out
       this.getAdminEmails(employee)
         .then(admins => {
-          admins.forEach(adminEmail => {
-            const formattedTime = this.formatTo12Hour(saved.checkOutTime);
-            const formattedCheckInTime = this.formatTo12Hour(saved.checkInTime);
-            this.mailService.sendAdminAttendanceAlert(adminEmail, {
-              alertTitle: 'Employee Checked Out',
-              bannerClass: 'checkout',
-              introText: `${empName} checked in at ${formattedCheckInTime} and checked out at ${formattedTime} on ${saved.date}. Daily total: ${saved.workHours || 0} hours worked.`,
-              employeeName: empName,
-              date: saved.date as any,
-              timeLabel: 'Check-Out Time',
-              timeValue: saved.checkOutTime,
-              status: saved.status,
-              isLate: false,
-              ...companyCtx,
-            }).catch(err => console.error(`[AttendanceService] Admin check-out email alert failed for ${adminEmail}:`, err));
-          });
+          if (co?.enableCheckOutEmailAlert !== false) {
+            admins.forEach(adminEmail => {
+              const formattedTime = this.formatTo12Hour(saved.checkOutTime);
+              const formattedCheckInTime = this.formatTo12Hour(saved.checkInTime);
+              this.mailService.sendAdminAttendanceAlert(adminEmail, {
+                alertTitle: 'Employee Checked Out',
+                bannerClass: 'checkout',
+                introText: `${empName} checked in at ${formattedCheckInTime} and checked out at ${formattedTime} on ${saved.date}. Daily total: ${saved.workHours || 0} hours worked.`,
+                employeeName: empName,
+                date: saved.date as any,
+                timeLabel: 'Check-Out Time',
+                timeValue: saved.checkOutTime,
+                status: saved.status,
+                isLate: false,
+                ...companyCtx,
+              }).catch(err => console.error(`[AttendanceService] Admin check-out email alert failed for ${adminEmail}:`, err));
+            });
+          }
 
           // Add FCM for Admin Checkout
           this.notificationsService.send({

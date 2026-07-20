@@ -109,6 +109,12 @@ export class Company {
   @Column({ default: true })
   enableLateEmailAlert: boolean; // send warning email on late check-in
 
+  @Column({ default: true })
+  enableCheckInEmailAlert: boolean; // send alert email on check-in
+
+  @Column({ default: true })
+  enableCheckOutEmailAlert: boolean; // send alert email on check-out
+
   @Column({ nullable: true })
   attendanceAlertEmails: string; // comma-separated admin emails for attendance alerts
 
