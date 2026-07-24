@@ -118,6 +118,27 @@ export class LeavesService {
     return query.getMany();
   }
 
+  /**
+   * Leaves overlapping a date window for one employee, keyed on the employee
+   * primary key. `findAll` filters on `employee.userId`, which is the wrong key
+   * when the caller already holds an employee id (admin profile screens).
+   */
+  async findForEmployeeInRange(
+    employeeId: string,
+    startDate: string,
+    endDate: string,
+  ): Promise<Leave[]> {
+    return this.leavesRepository
+      .createQueryBuilder('leave')
+      .where('leave.employeeId = :employeeId', { employeeId })
+      .andWhere('leave.startDate <= :endDate AND leave.endDate >= :startDate', {
+        startDate,
+        endDate,
+      })
+      .orderBy('leave.startDate', 'DESC')
+      .getMany();
+  }
+
   //  GET ONE
   async findOne(id: string): Promise<Leave> {
     const leave = await this.leavesRepository.findOne({

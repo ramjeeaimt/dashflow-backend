@@ -59,7 +59,7 @@ export class AuthService {
       username: user.email,
       sub: user.id,
       companyId: user.company?.id,
-      roles: user.roles,
+      roles: user.roles?.map(r => ({ id: r.id, name: r.name })),
       loginRole: user.loginRole,
     };
 

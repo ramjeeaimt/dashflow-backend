@@ -20,6 +20,27 @@ import { WFHRequestsService } from '../wfh-requests/wfh-requests.service';
 import { MailService } from '../mail/mail.service';
 
 
+const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+/** Normalises a `date` column (Date or 'YYYY-MM-DD' string) to 'YYYY-MM-DD'. */
+function toDateString(value: Date | string): string {
+  if (typeof value === 'string') return value.slice(0, 10);
+  // en-CA formats as YYYY-MM-DD, and reading it back in the local zone avoids
+  // the off-by-one that toISOString() causes for dates east of UTC.
+  return value.toLocaleDateString('en-CA');
+}
+
+function addDays(date: string, amount: number): string {
+  const next = new Date(`${date}T00:00:00`);
+  next.setDate(next.getDate() + amount);
+  return next.toLocaleDateString('en-CA');
+}
+
+function daysBetween(start: string, end: string): number {
+  const ms = new Date(`${end}T00:00:00`).getTime() - new Date(`${start}T00:00:00`).getTime();
+  return Math.round(ms / (1000 * 60 * 60 * 24)) + 1;
+}
+
 @Injectable()
 export class AttendanceService {
   // Office coordinates: 26.8604635, 81.0199275
@@ -651,6 +672,328 @@ export class AttendanceService {
       where: { id },
       relations: ['employee', 'employee.user'],
     });
+  }
+
+  /**
+   * A gap-free day-by-day attendance timeline for one employee.
+   *
+   * `findAll` only returns days that produced an attendance row, so weekends,
+   * leave and plain absences silently vanish from profile screens. This walks
+   * every calendar date in the window instead and classifies it by merging the
+   * attendance rows with approved leave and WFH requests, so the caller can
+   * render — and highlight — Sundays, leave and remote days without guessing.
+   */
+  async getEmployeeTimeline(filters: {
+    employeeId: string;
+    startDate?: string;
+    endDate?: string;
+  }): Promise<any> {
+    let employee = await this.employeeService.findOne(filters.employeeId);
+    if (!employee) {
+      employee = await this.employeeService.findByUserId(filters.employeeId);
+    }
+    if (!employee) {
+      throw new NotFoundException('Employee not found');
+    }
+
+    const endDate = filters.endDate || this.getISTDateString();
+    // Default window is 60 days, but never earlier than the day they joined.
+    let startDate = filters.startDate || addDays(endDate, -59);
+    const hireDate = employee.hireDate ? toDateString(employee.hireDate) : null;
+    if (hireDate && hireDate > startDate) startDate = hireDate;
+
+    const [records, leaves, wfhRequests] = await Promise.all([
+      this.attendanceRepository.find({
+        where: { employeeId: employee.id, date: Between(startDate as any, endDate as any) },
+      }),
+      this.leavesService.findForEmployeeInRange(employee.id, startDate, endDate),
+      this.wfhRequestsService.findForEmployeeInRange(employee.id, startDate, endDate),
+    ]);
+
+    const byDate = new Map<string, Attendance>();
+    for (const record of records) {
+      byDate.set(toDateString(record.date), record);
+    }
+
+    // Leave status is written as 'APPROVED' by updateStatus but the entity
+    // default is lowercase 'pending', so both casings exist in the table.
+    const isApproved = (status: string) => String(status).toUpperCase() === 'APPROVED';
+    const approvedLeaves = leaves.filter((l) => isApproved(l.status));
+    const approvedWfh = wfhRequests.filter((w) => isApproved(w.status));
+
+    const today = this.getISTDateString();
+    const days: any[] = [];
+
+    for (let date = endDate; date >= startDate; date = addDays(date, -1)) {
+      const weekday = new Date(`${date}T00:00:00`).getDay();
+      const record = byDate.get(date) || null;
+      const leave = approvedLeaves.find(
+        (l) => toDateString(l.startDate) <= date && toDateString(l.endDate) >= date,
+      );
+      const wfhRequest = approvedWfh.find(
+        (w) => toDateString(w.startDate) <= date && toDateString(w.endDate) >= date,
+      );
+
+      const isWeekend = weekday === 0;
+      const isFuture = date > today;
+
+      // Precedence: a real punch beats everything, then leave, then weekend.
+      let type: string;
+      if (record) type = record.status;
+      else if (leave) type = 'leave';
+      else if (isWeekend) type = 'weekend';
+      else if (isFuture) type = 'upcoming';
+      else type = 'absent';
+
+      const workMode = this.resolveWorkMode(record, employee, wfhRequest);
+      const isWfhDay = workMode.type === 'wfh';
+
+      days.push({
+        workMode,
+        date,
+        weekday,
+        weekdayName: WEEKDAY_NAMES[weekday],
+        isWeekend,
+        isFuture,
+        isToday: date === today,
+        type,
+        checkInTime: record?.checkInTime || null,
+        checkOutTime: record?.checkOutTime || null,
+        workHours: record?.workHours != null ? Number(record.workHours) : null,
+        overtime: record?.overtime != null ? Number(record.overtime) : null,
+        location: record?.location || null,
+        notes: record?.notes || null,
+        attendanceId: record?.id || null,
+        isWfh: isWfhDay,
+        wfh: wfhRequest
+          ? {
+              id: wfhRequest.id,
+              reason: wfhRequest.reason,
+              startDate: toDateString(wfhRequest.startDate),
+              endDate: toDateString(wfhRequest.endDate),
+              adminComment: wfhRequest.adminComment || null,
+              source: 'request',
+            }
+          : isWfhDay
+            ? { source: employee.employeeType === 'remote' ? 'contract' : 'logged' }
+            : null,
+        leave: leave
+          ? {
+              id: leave.id,
+              type: leave.type,
+              reason: leave.reason,
+              startDate: toDateString(leave.startDate),
+              endDate: toDateString(leave.endDate),
+              adminComment: leave.adminComment || null,
+            }
+          : null,
+      });
+    }
+
+    const workingDays = days.filter((d) => !d.isWeekend && !d.isFuture);
+    const summary = {
+      rangeStart: startDate,
+      rangeEnd: endDate,
+      totalDays: days.length,
+      workingDays: workingDays.length,
+      present: days.filter((d) => ['present', 'late', 'early_departure', 'early_checkin', 'wfh'].includes(d.type)).length,
+      late: days.filter((d) => d.type === 'late').length,
+      wfh: days.filter((d) => d.isWfh).length,
+      // Punched in outside the geofence with no WFH approval behind it.
+      offsite: days.filter((d) => d.workMode?.type === 'offsite').length,
+      // Leave and absence are counted over working days only — a leave range
+      // that spans a Sunday shouldn't inflate the days-off tally.
+      leave: workingDays.filter((d) => d.type === 'leave').length,
+      absent: workingDays.filter((d) => d.type === 'absent').length,
+      weekends: days.filter((d) => d.isWeekend).length,
+      totalHours:
+        Math.round(days.reduce((sum, d) => sum + (d.workHours || 0), 0) * 100) / 100,
+      overtimeHours:
+        Math.round(days.reduce((sum, d) => sum + (d.overtime || 0), 0) * 100) / 100,
+    };
+
+    return {
+      employee: {
+        id: employee.id,
+        name: employee.user
+          ? `${employee.user.firstName || ''} ${employee.user.lastName || ''}`.trim()
+          : null,
+        employeeType: employee.employeeType,
+        workFromHome: Boolean(employee.workFromHome),
+        startTime: employee.startTime || employee.checkInTime || null,
+        endTime: employee.endTime || null,
+        hireDate: hireDate,
+      },
+      wfhPolicy: this.describeWfhPolicy(employee, approvedWfh, summary.wfh),
+      wfhRequests: approvedWfh.map((w) => ({
+        id: w.id,
+        startDate: toDateString(w.startDate),
+        endDate: toDateString(w.endDate),
+        reason: w.reason,
+        adminComment: w.adminComment || null,
+        days: daysBetween(toDateString(w.startDate), toDateString(w.endDate)),
+      })),
+      summary,
+      days,
+    };
+  }
+
+  /**
+   * Works out where a day was actually worked from.
+   *
+   * `location` is not a reliable label: across existing rows it holds 'Office',
+   * a reverse-geocoded street address, a raw "lat, lng" pair, or placeholder
+   * junk like 'Fetching address...'. Rather than print that back at the user,
+   * coordinates are measured against the office geofence and combined with the
+   * WFH evidence (punch status, approved request, contract type).
+   *
+   * Note the deliberate gap between 'wfh' and 'offsite': a check-in far from
+   * the office is only labelled work-from-home when something actually says so.
+   * Otherwise it is reported as off-site with the distance, which is the honest
+   * reading and also the one worth reviewing.
+   */
+  private resolveWorkMode(
+    record: Attendance | null,
+    employee: Employee,
+    wfhRequest: any,
+  ): any {
+    if (!record) {
+      // No punch: an approved request still tells us the day was granted WFH.
+      return wfhRequest
+        ? { type: 'wfh', label: 'WFH', detail: 'Approved work from home', basis: 'request' }
+        : { type: 'none', label: null, detail: null, basis: null };
+    }
+
+    const raw = (record.location || '').trim();
+    const coordinates = raw.match(/^(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)$/);
+    let distanceMeters: number | null = null;
+
+    if (coordinates) {
+      distanceMeters = Math.round(
+        this.calculateDistance(
+          parseFloat(coordinates[1]),
+          parseFloat(coordinates[2]),
+          this.OFFICE_LAT,
+          this.OFFICE_LNG,
+        ),
+      );
+    }
+
+    const atOffice =
+      raw.toLowerCase() === 'office' ||
+      (distanceMeters !== null && distanceMeters <= this.MAX_DISTANCE_METERS);
+
+    const away =
+      distanceMeters === null
+        ? null
+        : distanceMeters >= 1000
+          ? `${Math.round(distanceMeters / 1000)} km from office`
+          : `${distanceMeters} m from office`;
+
+    // The day was explicitly punched as work-from-home.
+    if (record.status === 'wfh' || raw === 'WFH') {
+      return { type: 'wfh', label: 'WFH', detail: 'Checked in as work from home', basis: 'logged', distanceMeters };
+    }
+
+    // Checking in from the office overrides any standing WFH arrangement —
+    // "WFH enabled" means they *may* work from home, not that they always do.
+    if (atOffice) {
+      return { type: 'office', label: 'Office', detail: 'Checked in at the office', basis: 'geofence', distanceMeters };
+    }
+
+    if (wfhRequest) {
+      return {
+        type: 'wfh',
+        label: 'WFH',
+        detail: `Approved work from home${away ? ` — checked in ${away}` : ''}`,
+        basis: 'request',
+        distanceMeters,
+      };
+    }
+
+    // Away from the office and the profile permits it: remote by contract, or
+    // the work-from-home toggle is on. This is the hybrid case.
+    if (employee.employeeType === 'remote' || employee.workFromHome) {
+      return {
+        type: 'wfh',
+        label: 'WFH',
+        detail:
+          employee.employeeType === 'remote'
+            ? `Fully remote employee${away ? ` — checked in ${away}` : ''}`
+            : `Work from home is enabled on this profile${away ? ` — checked in ${away}` : ''}`,
+        basis: employee.employeeType === 'remote' ? 'contract' : 'profile',
+        distanceMeters,
+      };
+    }
+
+    // Away from the office with nothing authorising it. Reported as off-site
+    // rather than WFH — the distinction is the point of the column.
+    if (distanceMeters !== null) {
+      return {
+        type: 'offsite',
+        label: 'Off-site',
+        detail: `Checked in ${away} — no work-from-home approval on record`,
+        basis: 'geofence',
+        distanceMeters,
+      };
+    }
+
+    // A human-readable place name we can't measure — show it as-is.
+    const isPlaceholder = !raw || /^(fetching|address not found)/i.test(raw);
+    return {
+      type: isPlaceholder ? 'unknown' : 'offsite',
+      label: isPlaceholder ? 'Unknown' : raw,
+      detail: isPlaceholder ? 'Location was not captured at check-in' : `Checked in from ${raw}`,
+      basis: 'address',
+      distanceMeters: null,
+    };
+  }
+
+  /**
+   * Answers "is this person always remote, or was it granted for specific
+   * days?" — the distinction the profile screens need to label WFH correctly.
+   */
+  private describeWfhPolicy(
+    employee: Employee,
+    approvedWfh: any[],
+    wfhDaysLogged: number,
+  ) {
+    const type = employee.employeeType;
+    const flagged = Boolean(employee.workFromHome);
+
+    let mode: 'permanent' | 'hybrid' | 'occasional' | 'office';
+    let label: string;
+    let description: string;
+
+    if (type === 'remote') {
+      mode = 'permanent';
+      label = 'Fully remote';
+      description = 'Works from home permanently — no office geofence applies.';
+    } else if (flagged) {
+      mode = 'hybrid';
+      label = 'Hybrid (WFH enabled)';
+      description =
+        'Work from home is enabled on this profile, so check-in is allowed from anywhere.';
+    } else if (approvedWfh.length > 0) {
+      mode = 'occasional';
+      label = 'Occasional WFH';
+      description = `Works from the office, with ${approvedWfh.length} approved work-from-home request${approvedWfh.length === 1 ? '' : 's'} in this period.`;
+    } else {
+      mode = 'office';
+      label = 'Office based';
+      description = 'Checks in from the office; no work-from-home arrangement.';
+    }
+
+    return {
+      mode,
+      label,
+      description,
+      isAlwaysWfh: mode === 'permanent' || mode === 'hybrid',
+      employeeType: type,
+      workFromHomeEnabled: flagged,
+      approvedRequestCount: approvedWfh.length,
+      wfhDaysLogged,
+    };
   }
 
   async getTodayAttendance(employeeId: string): Promise<Attendance | null> {
