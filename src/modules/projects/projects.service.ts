@@ -345,6 +345,26 @@ export class ProjectsService {
   }
 
   async deleteProject(id: string): Promise<void> {
+    const manager = this.projectRepository.manager;
+    // 1. Get task IDs associated with this project
+    const tasks = await this.taskRepository.find({
+      where: { projectId: id },
+      select: ['id'],
+    });
+
+    if (tasks.length > 0) {
+      const taskIds = tasks.map(t => t.id);
+
+      // 2. Delete sidecar data for these tasks
+      await manager.query(`DELETE FROM "task_comments" WHERE "taskId" = ANY($1)`, [taskIds]);
+      await manager.query(`DELETE FROM "task_activities" WHERE "taskId" = ANY($1)`, [taskIds]);
+      await manager.query(`DELETE FROM "task_time_logs" WHERE "taskId" = ANY($1)`, [taskIds]);
+
+      // 3. Delete tasks
+      await this.taskRepository.delete({ id: In(taskIds) });
+    }
+
+    // 4. Delete the project
     await this.projectRepository.delete(id);
   }
 
