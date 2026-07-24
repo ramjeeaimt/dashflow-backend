@@ -69,6 +69,22 @@ export class AttendanceController {
   async getAnalytics(@Query() query: any) {
     return this.attendanceService.getAnalytics(query);
   }
+
+  // Gap-free day-by-day timeline (weekends, leave and WFH included) for one
+  // employee. Must stay above the `:id` route so it isn't swallowed by it.
+  @Get('timeline/:employeeId')
+  @CheckAbilities({ action: Action.Read, subject: 'attendance' })
+  async getEmployeeTimeline(
+    @Param('employeeId') employeeId: string,
+    @Query() query: any,
+  ) {
+    return this.attendanceService.getEmployeeTimeline({
+      employeeId,
+      startDate: query.startDate,
+      endDate: query.endDate,
+    });
+  }
+
   //by id
   @Get(':id')
   @CheckAbilities({ action: Action.Read, subject: 'attendance' })

@@ -43,8 +43,9 @@ export class AuthController {
     if (!requester) {
       throw new UnauthorizedException('User not found');
     }
+    // Role names are stored with inconsistent casing ('Admin' vs 'ADMIN') — compare case-insensitively.
     const isAdmin = ['admin@difmo.com', 'info@difmo.com', 'hello@system.com'].includes(requester.email) ||
-      requester.roles?.some(r => ['Admin', 'Super Admin'].includes(r.name));
+      requester.roles?.some(r => ['admin', 'super admin'].includes((r.name || '').trim().toLowerCase()));
 
     if (!isAdmin) {
       throw new UnauthorizedException('Only admins can impersonate');

@@ -67,28 +67,27 @@ import { EmailTemplatesModule } from './modules/email-templates/email-templates.
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => {
         const env = configService.get<string>('NODE_ENV') || 'development';
+        const isProd = env === 'production';
 
-        console.log(`[APP_START] Current NODE_ENV: ${env}`);
-        console.log(`[APP_START] APP_ENV_PROD: ${process.env.DATABASE_URL_PROD ? 'exists' : 'MISSING'}`);
-        console.log(`[APP_START] APP_ENV_DEV: ${process.env.DATABASE_URL_DEV ? 'exists' : 'MISSING'}`);
+        // Strict per-environment DB selection:
+        //   production  -> DATABASE_URL_PROD   (never the dev DB)
+        //   development -> DATABASE_URL_DEV    (never the prod DB)
+        // DATABASE_URL is only a shared fallback when the env-specific one is
+        // unset. There is deliberately NO cross-fallback between dev and prod so
+        // a running environment can never silently connect to the other's data.
+        const envSpecificUrl = isProd
+          ? configService.get<string>('DATABASE_URL_PROD')
+          : configService.get<string>('DATABASE_URL_DEV');
+        const dbUrl = envSpecificUrl || configService.get<string>('DATABASE_URL');
 
-        let dbUrl: string | undefined;
-        if (env === 'production') {
-          dbUrl = configService.get<string>('DATABASE_URL_PROD') || configService.get<string>('DATABASE_URL');
-        } else if (env === 'development') {
-          dbUrl = configService.get<string>('DATABASE_URL_DEV') || configService.get<string>('DATABASE_URL') || configService.get<string>('DATABASE_URL_PROD');
+        const usingFallback = !envSpecificUrl && !!dbUrl;
+        console.log(`[DB] NODE_ENV=${env} -> using ${isProd ? 'DATABASE_URL_PROD' : 'DATABASE_URL_DEV'}${usingFallback ? ' (MISSING — fell back to DATABASE_URL)' : ''}`);
+        if (dbUrl?.startsWith('postgres')) {
+          console.log(`[DB] Host: ${dbUrl.split('@')[1]?.split('/')[0] ?? 'unknown'}`);
         }
-
-        if (!dbUrl) {
-          dbUrl = configService.get<string>('DATABASE_URL');
+        if (usingFallback) {
+          console.warn(`[DB] ⚠️  ${isProd ? 'DATABASE_URL_PROD' : 'DATABASE_URL_DEV'} is not set; using DATABASE_URL. Set the ${env}-specific URL for proper separation.`);
         }
-
-        console.log(`[DB_DIAGNOSTIC] Environment: ${env}`);
-        console.log(`[DB_DIAGNOSTIC] DATABASE_URL_PROD defined: ${!!configService.get('DATABASE_URL_PROD')}`);
-        console.log(`[DB_DIAGNOSTIC] DATABASE_URL defined: ${!!configService.get('DATABASE_URL')}`);
-
-        const finalUrl = dbUrl || 'NONE';
-        console.log(`[DB_DIAGNOSTIC] Final Connection URL: ${finalUrl.startsWith('postgres') ? finalUrl.split('@')[1] : finalUrl}`);
 
         const entities = [
           Company,
@@ -123,7 +122,10 @@ import { EmailTemplatesModule } from './modules/email-templates/email-templates.
             type: 'postgres',
             url: dbUrl,
             entities,
-            synchronize: configService.get<string>('DB_SYNCHRONIZE') === 'true' || env === 'development',
+            // Auto-sync only outside production; prod schema changes must go through migrations
+            synchronize:
+              env !== 'production' &&
+              (configService.get<string>('DB_SYNCHRONIZE') === 'true' || env === 'development'),
             ssl: {
               rejectUnauthorized: false,
             },
@@ -141,10 +143,10 @@ import { EmailTemplatesModule } from './modules/email-templates/email-templates.
         }
 
         if (env === 'production') {
-          throw new Error('DATABASE_URL is not defined in production environment!');
+          throw new Error('No production database URL found. Set DATABASE_URL_PROD (or DATABASE_URL) in the environment.');
         }
 
-        console.log('Using SQLite Database');
+        console.log('Using SQLite Database (no DATABASE_URL_DEV / DATABASE_URL set for development)');
         return {
           type: 'sqlite',
           database: 'db.sqlite',

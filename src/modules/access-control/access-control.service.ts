@@ -150,8 +150,10 @@ export class AccessControlService {
   async deleteRole(id: string) {
     const role = await this.findOneRole(id);
 
-    // Safeguard: Do not allow deleting the primary Admin role
-    if (role.name === 'Admin' || role.name === 'Super Admin') {
+    // Safeguard: Do not allow deleting the primary Admin role.
+    // Case-insensitive — role names exist in the DB as 'Admin' AND 'ADMIN'.
+    const protectedRoles = ['admin', 'super admin'];
+    if (protectedRoles.includes((role.name || '').trim().toLowerCase())) {
       throw new Error('Cannot delete system-protected roles');
     }
 

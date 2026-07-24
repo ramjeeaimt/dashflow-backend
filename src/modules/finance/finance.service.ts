@@ -179,6 +179,7 @@ export class FinanceService {
     month?: number,
     year?: number,
     companyId?: string,
+    opts?: { page?: number; limit?: number; finalizedOnly?: boolean },
   ): Promise<Payroll[]> {
 
     const query = this.payrollRepository.createQueryBuilder('payroll')
@@ -204,6 +205,13 @@ export class FinanceService {
 
       const finalId = employee ? employee.id : employeeId;
       query.andWhere('payroll.employeeId = :employeeId', { employeeId: finalId });
+    }
+
+    // Employees only see finalized payslips (sent or paid), never drafts.
+    if (opts?.finalizedOnly) {
+      query.andWhere('payroll.status IN (:...finalStatuses)', {
+        finalStatuses: ['sent', 'paid'],
+      });
     }
 
     // 4. Month & Year Filters
@@ -258,7 +266,35 @@ export class FinanceService {
       console.error('[FinanceService] Failed to calculate yearly leaves:', err);
     }
 
-    return uniquePayrolls;
+    // Strip sensitive credential fields that ride along on the nested user
+    // relation — these must never leave the server.
+    const sanitized = uniquePayrolls.map((p) => {
+      const u = (p as any).employee?.user;
+      if (u) {
+        delete u.password;
+        delete u.resetPasswordOtp;
+        delete u.resetPasswordOtpExpires;
+      }
+      return p;
+    });
+
+    // Optional in-memory pagination (after de-dup so page counts are stable).
+    const page = Number(opts?.page);
+    const limit = Number(opts?.limit);
+    if (page > 0 && limit > 0) {
+      const start = (page - 1) * limit;
+      return sanitized.slice(start, start + limit);
+    }
+
+    return sanitized;
+  }
+
+  /** True if the given payroll belongs to the employee behind this user id. */
+  async isPayrollOwnedBy(payrollId: string, userId: string): Promise<boolean> {
+    const employee = await this.employeeRepository.findOne({ where: { userId } });
+    if (!employee) return false;
+    const payroll = await this.payrollRepository.findOne({ where: { id: payrollId } });
+    return !!payroll && payroll.employeeId === employee.id;
   }
 
   async findEmployeeByUserId(userId: string) {
@@ -409,10 +445,25 @@ export class FinanceService {
     let totalDeduction = 0;
     let payrolls: any[] = [];
 
+    // Bulk prefetch (2 queries) instead of 2 queries per employee. Month/year
+    // filtering of attendance stays in JS below — identical results to before.
+    const employeeIds = employees.map((e) => e.id);
+    const [existingPayrolls, allAttendance] = employeeIds.length
+      ? await Promise.all([
+          this.payrollRepository.find({ where: { employeeId: In(employeeIds), month, year } }),
+          this.attendanceRepository.find({ where: { employeeId: In(employeeIds) } }),
+        ])
+      : [[], []];
+    const payrollByEmployee = new Map(existingPayrolls.map((p) => [p.employeeId, p]));
+    const attendanceByEmployee = new Map<string, typeof allAttendance>();
+    for (const att of allAttendance) {
+      const list = attendanceByEmployee.get(att.employeeId);
+      if (list) list.push(att);
+      else attendanceByEmployee.set(att.employeeId, [att]);
+    }
+
     for (const emp of employees) {
-      const existing = await this.payrollRepository.findOne({
-        where: { employeeId: emp.id, month, year },
-      });
+      const existing = payrollByEmployee.get(emp.id);
       if (existing) {
         if (existing.status === 'sent' || existing.status === 'paid') {
           continue; // Skip if already finalized
@@ -425,10 +476,8 @@ export class FinanceService {
         }
       }
 
-      // Get attendance for this employee for the month
-      const attendance = await this.attendanceRepository.find({
-        where: { employeeId: emp.id },
-      });
+      // Attendance for this employee (month filter applied in the loop below)
+      const attendance = attendanceByEmployee.get(emp.id) ?? [];
 
       let presentDays = 0;
       let halfDays = 0;

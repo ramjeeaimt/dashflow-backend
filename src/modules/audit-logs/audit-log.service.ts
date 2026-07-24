@@ -34,4 +34,18 @@ export class AuditLogService {
       order: { createdAt: 'DESC' },
     });
   }
+
+  // Company-scoped recent logs, filtered and limited in SQL — for the dashboard
+  // feed. Joins user.company so the company filter actually works (findAll only
+  // loads 'user', which left user.company undefined for callers filtering on it).
+  async findRecentForCompany(companyId: string, limit = 50) {
+    return this.auditLogRepository
+      .createQueryBuilder('log')
+      .leftJoinAndSelect('log.user', 'user')
+      .leftJoin('user.company', 'company')
+      .where('company.id = :companyId', { companyId })
+      .orderBy('log.createdAt', 'DESC')
+      .take(limit)
+      .getMany();
+  }
 }

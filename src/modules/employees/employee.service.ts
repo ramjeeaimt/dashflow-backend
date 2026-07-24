@@ -143,6 +143,11 @@ export class EmployeeService {
     return savedEmployee;
   }
 
+  // Cheap COUNT for dashboards — avoids hydrating every employee row
+  async countByCompany(companyId: string): Promise<number> {
+    return this.employeeRepository.count({ where: { companyId } });
+  }
+
   async findAll(filters?: any): Promise<Employee[]> {
     console.log(
       '[EmployeeService] findAll called with filters:',

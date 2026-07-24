@@ -91,6 +91,26 @@ export class WFHRequestsService {
     return query.getMany();
   }
 
+  /**
+   * WFH requests overlapping a date window for one employee, keyed on the
+   * employee primary key (`findAll` keys on employee.userId instead).
+   */
+  async findForEmployeeInRange(
+    employeeId: string,
+    startDate: string,
+    endDate: string,
+  ): Promise<WFHRequest[]> {
+    return this.wfhRepository
+      .createQueryBuilder('wfh')
+      .where('wfh.employeeId = :employeeId', { employeeId })
+      .andWhere('wfh.startDate <= :endDate AND wfh.endDate >= :startDate', {
+        startDate,
+        endDate,
+      })
+      .orderBy('wfh.startDate', 'DESC')
+      .getMany();
+  }
+
   async findOne(id: string): Promise<WFHRequest> {
     const request = await this.wfhRepository.findOne({
       where: { id },

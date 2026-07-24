@@ -88,7 +88,7 @@ export class ProjectsController {
   @Get(':id')
   @CheckAbilities({ action: Action.Read, subject: 'project' })
   findOneProject(@Param('id') id: string) {
-    return this.projectsService.findOneProject(id);
+    return this.projectsService.findOneProjectDetailed(id);
   }
 
   @Put(':id')

@@ -7,6 +7,36 @@ import { Task } from './entities/task.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { Employee } from '../employees/employee.entity';
 
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Whole days from today until `deadline`; negative once the date has passed. */
+function daysUntil(deadline: Date | string | null | undefined): number | null {
+  if (!deadline) return null;
+  const target = new Date(deadline);
+  if (Number.isNaN(target.getTime())) return null;
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  target.setHours(0, 0, 0, 0);
+  return Math.round(
+    (target.getTime() - startOfToday.getTime()) / (1000 * 60 * 60 * 24),
+  );
+}
+
+
+const HEALTH_RANK = { overdue: 0, 'at-risk': 1, 'on-track': 2, completed: 3 };
+
+function compareByAttention(a: any, b: any): number {
+  const rank = HEALTH_RANK[a.health] - HEALTH_RANK[b.health];
+  if (rank !== 0) return rank;
+
+  // Within a bucket, the soonest deadline wins; undated projects trail.
+  if (a.daysRemaining === null && b.daysRemaining === null) return 0;
+  if (a.daysRemaining === null) return 1;
+  if (b.daysRemaining === null) return -1;
+  return a.daysRemaining - b.daysRemaining;
+}
+
 @Injectable()
 export class ProjectsService {
   constructor(
@@ -105,11 +135,19 @@ export class ProjectsService {
     return project;
   }
 
-  async findAllProjects(companyId: string): Promise<Project[]> {
-    return this.projectRepository.find({
+  async findAllProjects(companyId: string): Promise<any[]> {
+    const projects = await this.projectRepository.find({
       where: { companyId },
       relations: ['client'],
     });
+
+    const directory = await this.buildEmployeeDirectory(
+      projects.flatMap((p) => this.normalizeAssigned(p.assignedPeople)),
+    );
+
+    return projects
+      .map((project) => this.decorateProject(project, directory))
+      .sort(compareByAttention);
   }
 
   async findOneProject(id: string): Promise<Project | null> {
@@ -119,11 +157,98 @@ export class ProjectsService {
     });
   }
 
+
+  async findOneProjectDetailed(id: string): Promise<any | null> {
+    const project = await this.findOneProject(id);
+    if (!project) return null;
+
+    const directory = await this.buildEmployeeDirectory(
+      this.normalizeAssigned(project.assignedPeople),
+    );
+    return this.decorateProject(project, directory);
+  }
+
+
+  private normalizeAssigned(assignedPeople: any): string[] {
+    if (!assignedPeople) return [];
+    const raw = Array.isArray(assignedPeople)
+      ? assignedPeople
+      : String(assignedPeople).replace(/[{}"]/g, '').split(',');
+    return raw.map((v) => String(v).trim()).filter(Boolean);
+  }
+
+  private async buildEmployeeDirectory(ids: string[]): Promise<Map<string, any>> {
+    const directory = new Map<string, any>();
+
+    const uuids = [...new Set(ids.filter((id) => UUID_PATTERN.test(id)))];
+    if (uuids.length === 0) return directory;
+
+    const employees = await this.employeeRepository.find({
+      where: { id: In(uuids) },
+      relations: ['user', 'designation'],
+    });
+
+    for (const employee of employees) {
+      const name = employee.user
+        ? `${employee.user.firstName || ''} ${employee.user.lastName || ''}`.trim()
+        : '';
+      directory.set(employee.id, {
+        id: employee.id,
+        name: name || 'Unnamed employee',
+        email: employee.user?.email || null,
+        avatar: employee.avatar || null,
+        designation: employee.designation?.name || null,
+        employeeCode: employee.employeeCode || null,
+      });
+    }
+    return directory;
+  }
+
+  private decorateProject(project: Project, directory: Map<string, any>): any {
+    const assignedPeople = this.normalizeAssigned(project.assignedPeople);
+    const assignedEmployees = assignedPeople.map(
+      (id) => directory.get(id) || { id, name: id, avatar: null, designation: null },
+    );
+
+    const totalPayment = Number(project.totalPayment) || 0;
+    const paymentReceived = Number(project.paymentReceived) || 0;
+    const outstandingPayment = Math.max(totalPayment - paymentReceived, 0);
+    const paymentProgress =
+      totalPayment > 0
+        ? Math.min(Math.round((paymentReceived / totalPayment) * 100), 100)
+        : 0;
+
+    const isCompleted =
+      project.phase === 'Completed' || project.status === 'completed';
+    const daysRemaining = daysUntil(project.deadline);
+    const isOverdue = !isCompleted && daysRemaining !== null && daysRemaining < 0;
+
+    let health: 'completed' | 'overdue' | 'at-risk' | 'on-track' = 'on-track';
+    if (isCompleted) health = 'completed';
+    else if (isOverdue) health = 'overdue';
+    else if (daysRemaining !== null && daysRemaining <= 7) health = 'at-risk';
+
+    return {
+      ...project,
+      assignedPeople,
+      assignedEmployees,
+      teamSize: assignedEmployees.length,
+      totalPayment,
+      paymentReceived,
+      outstandingPayment,
+      paymentProgress,
+      daysRemaining,
+      isOverdue,
+      health,
+      derivedStatus: isCompleted ? 'completed' : project.status || 'active',
+    };
+  }
+
   async updateProject(id: string, data: Partial<Project>): Promise<Project | null> {
     try {
       const updateData: any = {};
       const columnNames = this.projectRepository.metadata.columns.map(c => c.propertyName);
-      
+
       for (const key of Object.keys(data)) {
         if (columnNames.includes(key) && key !== 'id' && key !== 'createdAt' && key !== 'updatedAt') {
           updateData[key] = (data as any)[key];
@@ -177,7 +302,7 @@ export class ProjectsService {
       if (Object.keys(updateData).length > 0) {
         await this.projectRepository.update(id, updateData);
       }
-      
+
       const updatedProject = await this.findOneProject(id);
 
       if (updatedProject && updatedFields.length > 0) {
@@ -186,7 +311,7 @@ export class ProjectsService {
           this.resolveEmployeeNames(oldProject?.assignedPeople),
           this.resolveEmployeeNames(updatedProject.assignedPeople)
         ]).then(([oldAssignedNames, newAssignedNames]) => {
-          
+
           const assignedField = updatedFields.find(f => f.field === 'assignedPeople');
           if (assignedField) {
             assignedField.oldValue = oldAssignedNames || 'none';
@@ -293,7 +418,7 @@ export class ProjectsService {
   async resolveEmployeeNames(assignedPeople: any): Promise<string> {
     try {
       if (!assignedPeople) return '';
-      
+
       let ids: string[] = [];
       if (Array.isArray(assignedPeople)) {
         ids = assignedPeople;
