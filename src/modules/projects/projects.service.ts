@@ -355,6 +355,9 @@ export class ProjectsService {
     if (tasks.length > 0) {
       const taskIds = tasks.map(t => t.id);
 
+      // Nullify taskId in time_entry to prevent constraint violations
+      await manager.query(`UPDATE "time_entry" SET "taskId" = NULL WHERE "taskId" = ANY($1)`, [taskIds]);
+
       // 2. Delete sidecar data for these tasks
       await manager.query(`DELETE FROM "task_comments" WHERE "taskId" = ANY($1)`, [taskIds]);
       await manager.query(`DELETE FROM "task_activities" WHERE "taskId" = ANY($1)`, [taskIds]);
