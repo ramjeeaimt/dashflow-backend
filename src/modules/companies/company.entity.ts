@@ -32,10 +32,10 @@ export class Company {
   @Column({ nullable: true })
   payslipSignature: string; // URL
 
-  @Column('text', { nullable: true, select: false })
+  @Column('text', { nullable: true })
   payslipEmailTemplate: string; // HTML string (Attachment)
 
-  @Column('text', { nullable: true, select: false })
+  @Column('text', { nullable: true })
   salaryEmailBodyTemplate: string; // HTML string (Email Body)
 
   @Column({ unique: true })
