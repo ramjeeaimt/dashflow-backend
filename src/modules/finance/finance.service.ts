@@ -133,7 +133,7 @@ export class FinanceService {
       if (emp && emp.userId) {
         const netSal = this.parseSalary(payroll.netSalary);
         console.log(`[FinanceService] Notifying employee ${emp.id} of payroll creation. Net Salary: ${netSal}`);
-        await this.notificationsService.send({
+        this.notificationsService.send({
           title: 'Difmo Pvt Ltd: Salary Slip Generated',
           message: `Your salary slip for ${payroll.month}/${payroll.year} has been generated. Net Salary: ₹${netSal.toFixed(2)}.`,
           type: 'both',
@@ -172,7 +172,7 @@ export class FinanceService {
           }
         }
 
-        await this.notificationsService.send({
+        this.notificationsService.send({
           title: `Payroll Generated for ${emp.user ? emp.user.firstName : 'Employee'}`,
           message: `Payroll for ${payroll.month}/${payroll.year} has been generated for ${emp.user ? `${emp.user.firstName} ${emp.user.lastName}` : 'Employee'}.`,
           type: 'both',
@@ -1122,7 +1122,7 @@ export class FinanceService {
       if (emp && emp.userId) {
         const netSal = this.parseSalary(payroll.netSalary);
         console.log(`[FinanceService] Notifying employee ${emp.id} of payroll payment. Amount: ${netSal}`);
-        await this.notificationsService.send({
+        this.notificationsService.send({
           title: 'Difmo Pvt Ltd: Salary Disbursed',
           message: `Your salary for ${payroll.month}/${payroll.year} has been marked as PAID. Amount: ₹${netSal.toFixed(2)}.`,
           type: 'both',
