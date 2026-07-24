@@ -53,6 +53,9 @@ export class Project {
   @Column({ default: 'active', nullable: true })
   status: string;
 
+  @Column({ default: false, nullable: true })
+  isCompanyProject: boolean;
+
   // Financials
   @Column({ nullable: true, type: 'numeric', default: 0 })
   totalPayment: number;

@@ -52,6 +52,12 @@ export class Expense {
   @Column({ default: 'pending' })
   status: string; // pending, approved, paid, rejected
 
+  @Column({ nullable: true })
+  projectId: string;
+
+  @Column({ nullable: true })
+  attachmentUrl: string;
+
   @CreateDateColumn()
   createdAt: Date;
 

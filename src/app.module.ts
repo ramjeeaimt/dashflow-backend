@@ -1,5 +1,7 @@
 import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { EventEmitterModule } from '@nestjs/event-emitter';
+import { ScheduleModule } from '@nestjs/schedule';
+import { ScheduledRemindersModule } from './modules/scheduled-reminders/scheduled-reminders.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { LoggerMiddleware } from './common/middleware/logger.middleware';
@@ -29,6 +31,9 @@ import { WFHRequestsModule } from './modules/wfh-requests/wfh-requests.module';
 
 import { Project } from './modules/projects/entities/project.entity';
 import { Task } from './modules/projects/entities/task.entity';
+import { TaskComment } from './modules/projects/entities/task-comment.entity';
+import { TaskActivity } from './modules/projects/entities/task-activity.entity';
+import { TaskTimeLog } from './modules/projects/entities/task-time-log.entity';
 import { Payroll } from './modules/finance/entities/payroll.entity';
 import { Expense } from './modules/finance/entities/expense.entity';
 import { AuditLog } from './modules/audit-logs/audit-log.entity';
@@ -102,6 +107,9 @@ import { EmailTemplatesModule } from './modules/email-templates/email-templates.
           Client,
           Project,
           Task,
+          TaskComment,
+          TaskActivity,
+          TaskTimeLog,
           Payroll,
           Expense,
           AuditLog,
@@ -181,6 +189,8 @@ import { EmailTemplatesModule } from './modules/email-templates/email-templates.
     WFHRequestsModule,
     EmailTemplatesModule,
     EventEmitterModule.forRoot(),
+    ScheduleModule.forRoot(),
+    ScheduledRemindersModule,
   ],
 
   controllers: [AppController],

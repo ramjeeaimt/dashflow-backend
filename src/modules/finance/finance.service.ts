@@ -4,6 +4,7 @@ import { Repository, Brackets, In } from 'typeorm';
 import { Payroll } from './entities/payroll.entity';
 import { Expense } from './entities/expense.entity';
 import { Company } from '../companies/company.entity';
+import { Project } from '../projects/entities/project.entity';
 import { Employee } from '../employees/employee.entity';
 import { Attendance } from '../attendance/attendance.entity';
 import { User } from '../users/user.entity';
@@ -59,6 +60,34 @@ export class FinanceService {
     // Convert to USD first, then to target
     const inUsd = amount / fromRate;
     return parseFloat((inUsd * toRate).toFixed(2));
+  }
+
+  private async syncProjectPayment(projectId: string) {
+    if (!projectId) return;
+    try {
+      const projectRepository = this.expenseRepository.manager.getRepository(Project);
+      const project = await projectRepository.findOne({ where: { id: projectId } });
+      if (!project) return;
+
+      const credits = await this.expenseRepository.find({
+        where: {
+          projectId,
+          type: In(['credit', 'income']),
+          status: In(['approved', 'paid', 'done'])
+        }
+      });
+
+      let totalReceived = 0;
+      for (const credit of credits) {
+        totalReceived += Number(credit.amount || 0);
+      }
+
+      project.paymentReceived = parseFloat(totalReceived.toFixed(2));
+      await projectRepository.save(project);
+      console.log(`[FinanceService] Synced project ${project.projectName} paymentReceived to ${project.paymentReceived}`);
+    } catch (err) {
+      console.error(`[FinanceService] Failed to sync project payment for ID ${projectId}:`, err.message);
+    }
   }
 
   /**
@@ -387,6 +416,10 @@ export class FinanceService {
 
       const newExpense = this.expenseRepository.create(data);
       const saved = await this.expenseRepository.save(newExpense);
+
+      if (saved.projectId) {
+        await this.syncProjectPayment(saved.projectId);
+      }
 
       // Notify (Email + FCM)
       const isCredit = saved.type === 'credit' || saved.type === 'income';
@@ -1137,12 +1170,21 @@ export class FinanceService {
     const expense = await this.expenseRepository.findOne({ where: { id }, relations: ['employee', 'employee.user'] });
     if (!expense) throw new NotFoundException('Expense not found');
 
+    const oldProjectId = expense.projectId;
+
     if (updateData.amount !== undefined) {
       updateData.amount = parseFloat(Number(updateData.amount).toFixed(2));
     }
 
     Object.assign(expense, updateData);
     const saved = await this.expenseRepository.save(expense);
+
+    if (saved.projectId) {
+      await this.syncProjectPayment(saved.projectId);
+    }
+    if (oldProjectId && oldProjectId !== saved.projectId) {
+      await this.syncProjectPayment(oldProjectId);
+    }
 
     // Notify (Email + FCM)
     const isCredit = saved.type === 'credit' || saved.type === 'income';
@@ -1177,7 +1219,11 @@ export class FinanceService {
   async deleteExpense(id: string): Promise<{ message: string }> {
     const expense = await this.expenseRepository.findOne({ where: { id } });
     if (!expense) throw new NotFoundException('Expense not found');
+    const projectId = expense.projectId;
     await this.expenseRepository.remove(expense);
+    if (projectId) {
+      await this.syncProjectPayment(projectId);
+    }
     return { message: 'Expense deleted successfully' };
   }
 

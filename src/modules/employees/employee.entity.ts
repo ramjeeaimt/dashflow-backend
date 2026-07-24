@@ -64,6 +64,10 @@ export class Employee {
   @Column({ type: 'date' })
   hireDate: Date;
 
+  // Birth date (year optional in practice) — drives the daily birthday alert to admins.
+  @Column({ type: 'date', nullable: true })
+  dateOfBirth: Date;
+
   @Column({ nullable: true })
   salary: string;
 

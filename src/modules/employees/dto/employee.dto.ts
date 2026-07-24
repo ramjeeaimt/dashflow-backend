@@ -55,6 +55,10 @@ export class CreateEmployeeDto {
   @IsDateString()
   hireDate: string;
 
+  @IsDateString()
+  @IsOptional()
+  dateOfBirth?: string;
+
   @IsString()
   @IsOptional()
   salary?: string;
@@ -148,6 +152,10 @@ export class UpdateEmployeeDto {
   @IsDateString()
   @IsOptional()
   hireDate?: string;
+
+  @IsDateString()
+  @IsOptional()
+  dateOfBirth?: string;
 
   @IsString()
   @IsOptional()
