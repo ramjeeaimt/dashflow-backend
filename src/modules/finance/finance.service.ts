@@ -1213,6 +1213,10 @@ export class FinanceService {
     };
   }
 
+  async findPayrollById(id: string): Promise<Payroll | null> {
+    return this.payrollRepository.findOne({ where: { id }, relations: ['employee', 'employee.user'] });
+  }
+
   async updatePayroll(id: string, data: Partial<Payroll>): Promise<Payroll> {
     const payroll = await this.payrollRepository.findOne({ where: { id }, relations: ['employee', 'employee.user'] });
     if (!payroll) throw new NotFoundException('Payroll not found');

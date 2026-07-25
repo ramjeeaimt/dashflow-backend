@@ -19,7 +19,7 @@ import { CheckAbilities } from '../access-control/abilities.decorator';
 import { Action } from '../access-control/ability.factory';
 import type { Response } from 'express';
 import { Attendance } from '../attendance/attendance.entity';
-import { ForbiddenException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 
 // Case-insensitive so DB role casing (e.g. 'ADMIN', 'HR Manager') still matches.
 const MANAGEMENT_ROLES = ['admin', 'super admin', 'manager', 'hr manager'];
@@ -222,6 +222,24 @@ export class FinanceController {
     const isSuperAdmin = ['admin@difmo.com', 'info@difmo.com', 'hello@system.com'].includes(user.email);
     const finalCompanyId = (!isSuperAdmin && user.company?.id) ? user.company.id : companyId;
     return this.financeService.getFinancialSummary(finalCompanyId, month, year, currency);
+  }
+
+  @Get('payroll/:id')
+  @CheckAbilities({ action: Action.Read, subject: 'payroll' })
+  async findOnePayroll(
+    @Param('id') id: string,
+    @Request() req: any
+  ) {
+    const user = req.user;
+    const payroll = await this.financeService.findPayrollById(id);
+    if (!payroll) {
+      throw new NotFoundException('Payroll not found');
+    }
+    const privileged = isPayrollPrivileged(user) || ['admin@difmo.com', 'info@difmo.com', 'hello@system.com'].includes(user.email);
+    if (!privileged && payroll.employeeId !== user.employeeId) {
+      throw new ForbiddenException('You are not authorized to view this payroll.');
+    }
+    return payroll;
   }
 
   @Patch('payroll/:id')
