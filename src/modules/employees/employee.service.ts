@@ -206,6 +206,14 @@ export class EmployeeService {
       query.andWhere('LOWER(employee.status) = LOWER(:status)', { status: filters.status });
     }
 
+    if (filters?.excludeInterns === 'true' || filters?.excludeInterns === true) {
+      console.log('[EmployeeService] Excluding interns');
+      query.andWhere(
+        '(employee.employmentType IS NULL OR LOWER(employee.employmentType) != :internType) AND (designation.id IS NULL OR LOWER(designation.name) NOT LIKE :internLike)',
+        { internType: 'intern', internLike: '%intern%' }
+      );
+    }
+
     if (filters?.employmentType) {
       console.log(
         '[EmployeeService] Filtering by employmentType:',
