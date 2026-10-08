@@ -877,7 +877,7 @@ export class AttendanceService {
       });
     }
 
-    const workingDays = days.filter((d) => !d.isWeekend && !d.isFuture);
+    const workingDays = days.filter((d) => !d.isWeekend && !d.isFuture && d.type !== 'holiday');
     const summary = {
       rangeStart: startDate,
       rangeEnd: endDate,
@@ -891,6 +891,7 @@ export class AttendanceService {
       // Leave and absence are counted over working days only — a leave range
       // that spans a Sunday shouldn't inflate the days-off tally.
       leave: workingDays.filter((d) => d.type === 'leave').length,
+      holidays: days.filter((d) => d.type === 'holiday' || d.type === 'holiday_half').length,
       absent: workingDays.filter((d) => d.type === 'absent').length,
       weekends: days.filter((d) => d.isWeekend).length,
       totalHours:
