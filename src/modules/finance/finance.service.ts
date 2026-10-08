@@ -93,20 +93,85 @@ export class FinanceService {
   /**
    * Calculates the exact number of active working days in a specific month based on company settings
    */
-  private getExactWorkingDaysInMonth(year: number, month: number, workingDaysArr?: string[]): number {
-    if (!workingDaysArr || workingDaysArr.length === 0) {
-      return 30; // Fallback
+  private getExactWorkingDaysInMonth(
+    year: number,
+    month: number,
+    workingDaysArr?: string[],
+    saturdayRule: string = 'second_saturday_half_day',
+    holidays: Array<{ date: string; type: 'full' | 'half' }> = [],
+  ): { workingDays: number; holidaysCount: number; halfDaysCount: number } {
+    const defaultWorkingDays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    let workingDaysList: string[] = defaultWorkingDays;
+    if (typeof workingDaysArr === 'string') {
+      try { workingDaysArr = JSON.parse(workingDaysArr); } catch (e) {}
     }
+    if (Array.isArray(workingDaysArr) && workingDaysArr.length > 0) {
+      workingDaysList = workingDaysArr.map((d: any) => String(d).toLowerCase());
+    }
+
+    const resolveSaturdayPolicy = (occurrence: number, rule: string): 'working' | 'half_day' | 'off' => {
+      switch (rule) {
+        case 'all_off': return 'off';
+        case 'all_half_day': return 'half_day';
+        case 'all_working': return 'working';
+        case 'second_saturday_half_day': return occurrence === 2 ? 'half_day' : 'working';
+        case 'second_saturday_off': return occurrence === 2 ? 'off' : 'working';
+        case 'second_fourth_saturday_off': return (occurrence === 2 || occurrence === 4) ? 'off' : 'working';
+        case 'second_fourth_saturday_half_day': return (occurrence === 2 || occurrence === 4) ? 'half_day' : 'working';
+        default: return occurrence === 2 ? 'half_day' : 'working';
+      }
+    };
+
     const daysInMonth = new Date(year, month, 0).getDate();
-    let count = 0;
+    let workingCount = 0;
+    let holidaysCount = 0;
+    let halfDaysCount = 0;
+
     for (let i = 1; i <= daysInMonth; i++) {
       const d = new Date(year, month - 1, i);
+      const weekday = d.getDay(); // 0 = Sun, 6 = Sat
+      const isoDate = `${year}-${String(month).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
       const dayName = d.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
-      if (workingDaysArr.includes(dayName)) {
-        count++;
+
+      // Check Holiday
+      const holiday = holidays.find((h) => h.date === isoDate);
+      if (holiday) {
+        if (holiday.type === 'half') {
+          halfDaysCount++;
+          workingCount += 0.5;
+        } else {
+          holidaysCount++;
+        }
+        continue;
+      }
+
+      if (weekday === 6) { // Saturday
+        const occurrence = Math.ceil(i / 7);
+        const satPolicy = resolveSaturdayPolicy(occurrence, saturdayRule);
+        if (satPolicy === 'working') {
+          workingCount += 1;
+        } else if (satPolicy === 'half_day') {
+          halfDaysCount++;
+          workingCount += 0.5;
+        }
+        continue;
+      }
+
+      if (weekday === 0) { // Sunday
+        continue;
+      }
+
+      // Mon-Fri
+      if (workingDaysList.includes(dayName)) {
+        workingCount += 1;
       }
     }
-    return count;
+
+    return {
+      workingDays: Math.max(1, Math.round(workingCount)),
+      holidaysCount,
+      halfDaysCount,
+    };
   }
 
   /**
@@ -484,7 +549,10 @@ export class FinanceService {
 
       // Calculate Exact Working Days for Per Day calculation
       const workingDaysArr = emp.company?.workingDays;
-      const exactWorkingDaysInMonth = Number(this.getExactWorkingDaysInMonth(year, month, workingDaysArr)) || 22;
+      const saturdayRule = emp.company?.saturdayRule || 'second_saturday_half_day';
+      const holidaysList: Array<{ date: string; type: 'full' | 'half' }> = Array.isArray(emp.company?.holidays) ? emp.company.holidays : [];
+      const { workingDays: exactWorkingDaysInMonth, holidaysCount, halfDaysCount } =
+        this.getExactWorkingDaysInMonth(year, month, workingDaysArr, saturdayRule, holidaysList);
 
       // Calculate missing working days (unattended/unlogged days) as absent days
       const missingDays = Math.max(0, exactWorkingDaysInMonth - (presentDays + halfDays + leaveDays + absentDays));
@@ -552,6 +620,8 @@ export class FinanceService {
         year,
         totalWorkingDays: exactWorkingDaysInMonth,
         workDays: presentDays + halfDays,
+        holidaysCount,
+        halfDaysCount,
         paidLeaves: Math.min(totalMissedDays, freeLeaves),
         unpaidLeaves: unpaidMissedDays,
         workingHoursPerDay: Math.round(defaultWorkingHours),

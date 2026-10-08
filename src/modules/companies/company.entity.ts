@@ -124,6 +124,18 @@ export class Company {
   @Column({ nullable: true })
   activeEmailTemplateId: string; // The selected global email template
 
+  @Column({ nullable: true, default: 'second_saturday_half_day' })
+  saturdayRule: string; // 'all_working' | 'all_off' | 'all_half_day' | 'second_saturday_half_day' | 'second_saturday_off' | 'second_fourth_saturday_off'
+
+  @Column({ type: 'jsonb', nullable: true, default: () => "'[]'" })
+  holidays: Array<{
+    id: string;
+    name: string;
+    date: string;
+    type: 'full' | 'half';
+    description?: string;
+  }>;
+
   // ── Finance & Payroll Policies ─────────────────────────────────────
   @Column({ type: 'int', default: 0 })
   allowanceAmount: number;

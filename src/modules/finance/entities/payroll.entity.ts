@@ -95,6 +95,12 @@ export class Payroll {
   @Column({ default: 'pending' })
   financeStatus: string;
 
+  @Column({ type: 'int', default: 0 })
+  holidaysCount: number;
+
+  @Column({ type: 'int', default: 0 })
+  halfDaysCount: number;
+
   @Column({ type: 'text', nullable: true })
   notes: string;
 

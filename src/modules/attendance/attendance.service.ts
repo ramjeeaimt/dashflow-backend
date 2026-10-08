@@ -730,6 +730,38 @@ export class AttendanceService {
     const approvedLeaves = leaves.filter((l) => isApproved(l.status));
     const approvedWfh = wfhRequests.filter((w) => isApproved(w.status));
 
+    const company = employee.company;
+    const saturdayRule = company?.saturdayRule || 'second_saturday_half_day';
+    const holidays: Array<{ id: string; name: string; date: string; type: 'full' | 'half'; description?: string }> =
+      Array.isArray(company?.holidays) ? company.holidays : [];
+
+    let companyWorkingDays = company?.workingDays;
+    if (typeof companyWorkingDays === 'string') {
+      try { companyWorkingDays = JSON.parse(companyWorkingDays); } catch (e) {}
+    }
+    const workingDaysList = (Array.isArray(companyWorkingDays) && companyWorkingDays.length > 0
+      ? companyWorkingDays
+      : ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'])
+      .map((d: any) => String(d).toLowerCase());
+
+    const getSaturdayOccurrence = (dateStr: string): number => {
+      const dayOfMonth = parseInt(dateStr.split('-')[2], 10);
+      return Math.ceil(dayOfMonth / 7);
+    };
+
+    const resolveSaturdayPolicy = (occurrence: number, rule: string): 'working' | 'half_day' | 'off' => {
+      switch (rule) {
+        case 'all_off': return 'off';
+        case 'all_half_day': return 'half_day';
+        case 'all_working': return 'working';
+        case 'second_saturday_half_day': return occurrence === 2 ? 'half_day' : 'working';
+        case 'second_saturday_off': return occurrence === 2 ? 'off' : 'working';
+        case 'second_fourth_saturday_off': return (occurrence === 2 || occurrence === 4) ? 'off' : 'working';
+        case 'second_fourth_saturday_half_day': return (occurrence === 2 || occurrence === 4) ? 'half_day' : 'working';
+        default: return occurrence === 2 ? 'half_day' : 'working';
+      }
+    };
+
     const today = this.getISTDateString();
     const days: any[] = [];
 
@@ -743,16 +775,46 @@ export class AttendanceService {
         (w) => toDateString(w.startDate) <= date && toDateString(w.endDate) >= date,
       );
 
-      const isWeekend = weekday === 0;
+      // Check Company Holiday
+      const holiday = holidays.find((h) => h.date === date) || null;
+
+      // Check Saturday rule
+      const isSaturday = weekday === 6;
+      let saturdayPolicy: 'working' | 'half_day' | 'off' = 'working';
+      let saturdayIndex = 0;
+      if (isSaturday) {
+        saturdayIndex = getSaturdayOccurrence(date);
+        saturdayPolicy = resolveSaturdayPolicy(saturdayIndex, saturdayRule);
+      }
+
+      const isSunday = weekday === 0;
+      const fullDayName = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][weekday];
+      const isScheduledWorkingDay = workingDaysList.includes(fullDayName);
+      
+      const isWeekend = isSunday || (!isScheduledWorkingDay && !isSaturday) || (isSaturday && saturdayPolicy === 'off');
       const isFuture = date > today;
 
-      // Precedence: a real punch beats everything, then leave, then weekend.
+      // Precedence: a real punch beats everything, then leave, then holiday, then saturday half day, then weekend.
       let type: string;
-      if (record) type = record.status;
-      else if (leave) type = 'leave';
-      else if (isWeekend) type = 'weekend';
-      else if (isFuture) type = 'upcoming';
-      else type = 'absent';
+      if (record) {
+        if (record.status === 'half-day' || (isSaturday && saturdayPolicy === 'half_day')) {
+          type = 'half-day';
+        } else {
+          type = record.status;
+        }
+      } else if (leave) {
+        type = 'leave';
+      } else if (holiday) {
+        type = holiday.type === 'half' ? 'holiday_half' : 'holiday';
+      } else if (isSaturday && saturdayPolicy === 'half_day') {
+        type = 'half-day';
+      } else if (isWeekend) {
+        type = 'weekend';
+      } else if (isFuture) {
+        type = 'upcoming';
+      } else {
+        type = 'absent';
+      }
 
       const workMode = this.resolveWorkMode(record, employee, wfhRequest);
       const isWfhDay = workMode.type === 'wfh';
@@ -773,6 +835,22 @@ export class AttendanceService {
         location: record?.location || null,
         notes: record?.notes || null,
         attendanceId: record?.id || null,
+        holiday: holiday ? {
+          id: holiday.id,
+          name: holiday.name,
+          type: holiday.type,
+          description: holiday.description,
+        } : null,
+        saturdayInfo: isSaturday ? {
+          occurrence: saturdayIndex,
+          policy: saturdayPolicy,
+          isSecondSaturday: saturdayIndex === 2,
+        } : null,
+        policyLabel: holiday
+          ? `Holiday: ${holiday.name}`
+          : (isSaturday && saturdayPolicy === 'half_day')
+          ? `${saturdayIndex === 2 ? '2nd Saturday' : 'Saturday'} (Half Day)`
+          : null,
         isWfh: isWfhDay,
         wfh: wfhRequest
           ? {
