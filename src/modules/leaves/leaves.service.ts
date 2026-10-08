@@ -93,9 +93,10 @@ export class LeavesService {
       .orderBy('leave.createdAt', 'DESC');
 
     if (filters?.employeeId) {
-      query.andWhere('employee.userId = :userId', {
-        userId: filters.employeeId,
-      });
+      query.andWhere(
+        '(employee.userId = :empId OR leave.employeeId = :empId)',
+        { empId: filters.employeeId },
+      );
     }
 
     if (filters?.companyId) {

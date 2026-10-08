@@ -495,7 +495,7 @@ export class FinanceService {
       // Use company-configured half-day pay percent if available, else default to 50%
       const halfPercent = Number(emp.company?.halfDayPayPercent) || defaultHalfPercent;
       const casualLeavesPerYear = Number(emp.company?.casualLeavesPerYear) || 12;
-      const freeLeaves = casualLeavesPerYear / 12;
+      const freeLeaves = (presentDays === 0 && halfDays === 0) ? 0 : (casualLeavesPerYear / 12);
 
       // Leaves deduction logic: group Absent and Leave together to consume Free CL
       const totalMissedDays = leaveDays + absentDays;

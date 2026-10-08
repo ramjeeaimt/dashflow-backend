@@ -4,6 +4,7 @@ import { Payroll } from './entities/payroll.entity';
 import { Expense } from './entities/expense.entity';
 import { FinanceService } from './finance.service';
 import { FinanceController } from './finance.controller';
+import { PayrollAliasController } from './payroll-alias.controller';
 import { Company } from '../companies/company.entity';
 import { Employee } from '../employees/employee.entity';
 
@@ -20,7 +21,7 @@ import { User } from '../users/user.entity';
     NotificationsModule,
   ],
   providers: [FinanceService],
-  controllers: [FinanceController],
+  controllers: [FinanceController, PayrollAliasController],
   exports: [FinanceService],
 })
 export class FinanceModule { }

@@ -1,8 +1,6 @@
 import 'reflect-metadata';
 import * as pg from 'pg';
 
-// Force node-postgres to parse 'timestamp' (without time zone) as UTC instead of local time
-// OID 1114 is the TIMESTAMP type in PostgreSQL
 pg.types.setTypeParser(1114, (stringValue) => {
   return new Date(stringValue + 'Z');
 });

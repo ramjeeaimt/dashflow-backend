@@ -235,9 +235,12 @@ export class FinanceController {
     if (!payroll) {
       throw new NotFoundException('Payroll not found');
     }
-    const privileged = isPayrollPrivileged(user) || ['admin@difmo.com', 'info@difmo.com', 'hello@system.com'].includes(user.email);
-    if (!privileged && payroll.employeeId !== user.employeeId) {
-      throw new ForbiddenException('You are not authorized to view this payroll.');
+    const privileged = isPayrollPrivileged(user) || ['admin@difmo.com', 'info@difmo.com', 'hello@system.com'].includes((user.email || '').toLowerCase());
+    if (!privileged) {
+      const owned = await this.financeService.isPayrollOwnedBy(id, user.id);
+      if (!owned) {
+        throw new ForbiddenException('You are not authorized to view this payroll.');
+      }
     }
     return payroll;
   }
