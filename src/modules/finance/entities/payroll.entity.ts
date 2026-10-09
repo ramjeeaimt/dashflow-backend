@@ -101,6 +101,15 @@ export class Payroll {
   @Column({ type: 'int', default: 0 })
   halfDaysCount: number;
 
+  @Column({ type: 'int', default: 0 })
+  lateCount: number;
+
+  @Column({ type: 'int', default: 0 })
+  lateDeductionCount: number;
+
+  @Column({ type: 'float', default: 0 })
+  lateDeductionAmount: number;
+
   @Column({ type: 'text', nullable: true })
   notes: string;
 

@@ -7,6 +7,7 @@ import {
   Query,
   UseGuards,
   Patch,
+  Request,
 } from '@nestjs/common';
 import { AttendanceService } from './attendance.service';
 import {
@@ -90,6 +91,39 @@ export class AttendanceController {
   @CheckAbilities({ action: Action.Read, subject: 'attendance' })
   async findOne(@Param('id') id: string) {
     return this.attendanceService.findOne(id);
+  }
+
+  @Patch(':id/waive-late')
+  @CheckAbilities({ action: Action.Update, subject: 'attendance' })
+  async toggleWaiveLate(
+    @Param('id') id: string,
+    @Body() body: { waived: boolean; reason?: string },
+    @Request() req: any,
+  ) {
+    const adminUser = req.user;
+    const adminName = adminUser
+      ? `${adminUser.firstName || ''} ${adminUser.lastName || ''}`.trim() || adminUser.email
+      : 'Admin';
+    return this.attendanceService.toggleLateDeductionWaived(id, body.waived, adminName, body.reason);
+  }
+
+  @Post('waive-late-by-date')
+  @CheckAbilities({ action: Action.Update, subject: 'attendance' })
+  async waiveLateByDate(
+    @Body() body: { employeeId: string; date: string; waived: boolean; reason?: string },
+    @Request() req: any,
+  ) {
+    const adminUser = req.user;
+    const adminName = adminUser
+      ? `${adminUser.firstName || ''} ${adminUser.lastName || ''}`.trim() || adminUser.email
+      : 'Admin';
+    return this.attendanceService.waiveLateByDate(
+      body.employeeId,
+      body.date,
+      body.waived,
+      adminName,
+      body.reason,
+    );
   }
 
   @Patch(':id')

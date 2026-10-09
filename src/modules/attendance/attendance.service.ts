@@ -835,6 +835,10 @@ export class AttendanceService {
         location: record?.location || null,
         notes: record?.notes || null,
         attendanceId: record?.id || null,
+        lateDeductionWaived: Boolean(record?.lateDeductionWaived),
+        lateDeductionWaivedBy: record?.lateDeductionWaivedBy || null,
+        lateDeductionWaivedReason: record?.lateDeductionWaivedReason || null,
+        isLate: type === 'late',
         holiday: holiday ? {
           id: holiday.id,
           name: holiday.name,
@@ -885,6 +889,8 @@ export class AttendanceService {
       workingDays: workingDays.length,
       present: days.filter((d) => ['present', 'late', 'early_departure', 'early_checkin', 'wfh'].includes(d.type)).length,
       late: days.filter((d) => d.type === 'late').length,
+      lateWaived: days.filter((d) => d.type === 'late' && d.lateDeductionWaived).length,
+      lateDeducted: days.filter((d) => d.type === 'late' && !d.lateDeductionWaived).length,
       wfh: days.filter((d) => d.isWfh).length,
       // Punched in outside the geofence with no WFH approval behind it.
       offsite: days.filter((d) => d.workMode?.type === 'offsite').length,
@@ -1233,6 +1239,15 @@ export class AttendanceService {
     if (data.checkInTime) attendance.checkInTime = data.checkInTime;
     if (data.checkOutTime) attendance.checkOutTime = data.checkOutTime;
     if (data.status) attendance.status = data.status;
+    if (data.lateDeductionWaived !== undefined) {
+      attendance.lateDeductionWaived = Boolean(data.lateDeductionWaived);
+    }
+    if (data.lateDeductionWaivedBy !== undefined) {
+      attendance.lateDeductionWaivedBy = data.lateDeductionWaivedBy;
+    }
+    if (data.lateDeductionWaivedReason !== undefined) {
+      attendance.lateDeductionWaivedReason = data.lateDeductionWaivedReason;
+    }
 
     // Handle notes (optional)
     if (data.notes) {
@@ -1314,6 +1329,41 @@ export class AttendanceService {
 
     return { message: 'Attendance record revoked successfully. You can now check in again.' };
   }
+  async toggleLateDeductionWaived(
+    id: string,
+    waived: boolean,
+    adminName: string,
+    reason?: string,
+  ): Promise<Attendance> {
+    const attendance = await this.attendanceRepository.findOne({ where: { id } });
+    if (!attendance) {
+      throw new NotFoundException('Attendance record not found');
+    }
+    attendance.lateDeductionWaived = waived;
+    attendance.lateDeductionWaivedBy = waived ? adminName : null;
+    attendance.lateDeductionWaivedReason = waived ? (reason || 'Waived by Admin') : null;
+    return this.attendanceRepository.save(attendance);
+  }
+
+  async waiveLateByDate(
+    employeeId: string,
+    date: string,
+    waived: boolean,
+    adminName: string,
+    reason?: string,
+  ): Promise<Attendance> {
+    const attendance = await this.attendanceRepository.findOne({
+      where: { employeeId, date: date as any },
+    });
+    if (!attendance) {
+      throw new NotFoundException('Attendance record not found for this date');
+    }
+    attendance.lateDeductionWaived = waived;
+    attendance.lateDeductionWaivedBy = waived ? adminName : null;
+    attendance.lateDeductionWaivedReason = waived ? (reason || 'Waived by Admin') : null;
+    return this.attendanceRepository.save(attendance);
+  }
+
   private formatTo12Hour(time24: string): string {
     if (!time24) return '';
     const [hourStr, minute] = time24.split(':');

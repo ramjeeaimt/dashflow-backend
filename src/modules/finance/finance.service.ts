@@ -508,6 +508,8 @@ export class FinanceService {
       let halfDays = 0;
       let leaveDays = 0;
       let absentDays = 0;
+      let lateDays = 0;
+      let lateDeductionDays = 0;
       let totalDailyOvertime = 0;
       let totalDailyUndertime = 0;
 
@@ -530,6 +532,14 @@ export class FinanceService {
 
         if (['present', 'late', 'early_checkin', 'early_departure', 'wfh'].includes(att.status)) {
           presentDays++;
+
+          if (att.status === 'late') {
+            lateDays++;
+            const isLateDeductionEnabled = emp.company?.enableLateDeduction !== false;
+            if (isLateDeductionEnabled && !att.lateDeductionWaived) {
+              lateDeductionDays++;
+            }
+          }
 
           // Calculate overtime and undertime only for present-type days
           if (hoursWorked > defaultWorkingHours) {
@@ -570,8 +580,10 @@ export class FinanceService {
       const unpaidMissedDays = Math.max(0, totalMissedDays - freeLeaves);
       const leaveDeduction = Number(unpaidMissedDays * perDay) || 0;
 
-      // Half-day deduction uses company-configured percentage
-      const halfDeduction = Number(halfDays * (perDay * (halfPercent / 100))) || 0;
+      // Half-day deduction: regular half-days + late arrivals (if late deduction not waived by admin)
+      const regularHalfDeduction = Number(halfDays * (perDay * (halfPercent / 100))) || 0;
+      const lateDeductionAmount = Number(lateDeductionDays * (perDay * (halfPercent / 100))) || 0;
+      const totalHalfDeduction = regularHalfDeduction + lateDeductionAmount;
 
       // Fetch dynamic overtime configs
       const overtimePolicy = emp.company?.overtimePolicy || 'fixed';
@@ -593,7 +605,7 @@ export class FinanceService {
       let allowanceAmount = Number(emp.company?.allowanceAmount) || 0;
 
       // Final net salary calculation
-      let baseAfterDeduction = basicSalary - leaveDeduction - halfDeduction;
+      let baseAfterDeduction = basicSalary - leaveDeduction - totalHalfDeduction;
       if (baseAfterDeduction <= 0) {
         baseAfterDeduction = 0;
         allowanceAmount = 0; // No allowance if completely absent
@@ -603,7 +615,7 @@ export class FinanceService {
 
       totalBasic += basicSalary;
       totalNet += netSalary;
-      totalDeduction += leaveDeduction + halfDeduction;
+      totalDeduction += leaveDeduction + totalHalfDeduction;
 
       // Save payroll record as a draft
       const payroll = this.payrollRepository.create({
@@ -611,9 +623,12 @@ export class FinanceService {
         companyId: emp.companyId,
         basicSalary: Math.round(basicSalary),
         allowances: Math.round(allowanceAmount),
-        deductions: Math.round(leaveDeduction + halfDeduction),
+        deductions: Math.round(leaveDeduction + totalHalfDeduction),
         leaveDeduction: Math.round(leaveDeduction),
-        halfDeduction: Math.round(halfDeduction),
+        halfDeduction: Math.round(totalHalfDeduction),
+        lateCount: lateDays,
+        lateDeductionCount: lateDeductionDays,
+        lateDeductionAmount: Math.round(lateDeductionAmount),
         overtime: Math.round(overtimePay),
         netSalary: Math.round(netSalary),
         month,
@@ -637,7 +652,7 @@ export class FinanceService {
         employeeId: emp.id,
         basicSalary,
         leaveDeduction,
-        halfDeduction,
+        halfDeduction: totalHalfDeduction,
         overtimePay,
         netSalary,
       });

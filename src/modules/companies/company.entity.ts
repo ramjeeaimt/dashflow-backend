@@ -110,6 +110,9 @@ export class Company {
   enableLateEmailAlert: boolean; // send warning email on late check-in
 
   @Column({ default: true })
+  enableLateDeduction: boolean; // deduct half-day salary for late check-in (can be waived by admin)
+
+  @Column({ default: true })
   enableCheckInEmailAlert: boolean; // send alert email on check-in
 
   @Column({ default: true })
