@@ -66,7 +66,7 @@ export class AuthService {
     console.log(`[AuthService] User: ${user.email}, Roles: ${JSON.stringify(user.roles?.map(r => r.name))}, LoginRole: ${user.loginRole}`);
 
     return {
-      access_token: this.jwtService.sign(payload),
+      access_token: this.jwtService.sign(payload, { expiresIn: '365d' }),
       loginRole: user.loginRole,
       user: {
         id: user.id,
