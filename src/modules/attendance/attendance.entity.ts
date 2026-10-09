@@ -61,10 +61,10 @@ export class Attendance {
   @Column({ default: false })
   lateDeductionWaived: boolean;
 
-  @Column({ nullable: true })
+  @Column({ type: 'text', nullable: true })
   lateDeductionWaivedBy?: string | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'text', nullable: true })
   lateDeductionWaivedReason?: string | null;
 
   @CreateDateColumn()
