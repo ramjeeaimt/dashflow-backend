@@ -148,6 +148,23 @@ export class EmployeeService {
     return this.employeeRepository.count({ where: { companyId } });
   }
 
+  // Count active employees (not soft-deleted, status = active)
+  async countActiveByCompany(companyId: string): Promise<number> {
+    return this.employeeRepository
+      .createQueryBuilder('employee')
+      .where('employee.companyId = :companyId', { companyId })
+      .andWhere('employee.isDeleted = :isDeleted', { isDeleted: false })
+      .andWhere('LOWER(employee.status) = :status', { status: 'active' })
+      .getCount();
+  }
+
+  // Count former/inactive employees
+  async countFormerByCompany(companyId: string): Promise<number> {
+    const total = await this.countByCompany(companyId);
+    const active = await this.countActiveByCompany(companyId);
+    return Math.max(0, total - active);
+  }
+
   async findAll(filters?: any): Promise<Employee[]> {
     console.log(
       '[EmployeeService] findAll called with filters:',

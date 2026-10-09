@@ -55,7 +55,9 @@ export class EmployeeController {
     const isSuperAdmin = user && ['admin@difmo.com', 'info@difmo.com', 'hello@system.com'].includes(user.email);
     const finalCompanyId = (!isSuperAdmin && user?.company?.id) ? user.company.id : companyId;
     const count = await this.employeeService.count(finalCompanyId);
-    return { count };
+    const active = finalCompanyId ? await this.employeeService.countActiveByCompany(finalCompanyId) : count;
+    const former = Math.max(0, count - active);
+    return { count, total: count, active, former };
   }
 
   @Get('last-code')

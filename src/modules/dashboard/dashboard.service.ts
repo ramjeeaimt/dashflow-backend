@@ -29,9 +29,11 @@ export class DashboardService {
     // Use IST today string to match attendance date logic
     const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
     
-    const [totalEmployees, attendanceToday, tasks] = await Promise.all([
+    const [totalEmployees, activeEmployees, formerEmployees, attendanceToday, tasks] = await Promise.all([
         // COUNT instead of hydrating every employee row — only the total is used
         this.employeeService.countByCompany(companyId),
+        this.employeeService.countActiveByCompany(companyId),
+        this.employeeService.countFormerByCompany(companyId),
         // Company-wide attendance for the "Present Today" count
         this.attendanceService.findAll({
             companyId,
@@ -64,6 +66,8 @@ export class DashboardService {
 
     return {
       totalEmployees,
+      activeEmployees,
+      formerEmployees,
       presentToday: attendanceToday.length,
       attendanceBreakdown,
       userStatus: userAttendance ? (userAttendance as any).status : 'absent',
