@@ -59,6 +59,32 @@ export class AuthController {
     return this.authService.register(body);
   }
 
+  /** Public: used during registration to block Continue when email is taken. */
+  @Post('check-email')
+  async checkEmail(@Body('email') email: string) {
+    return this.authService.checkEmailAvailable(email);
+  }
+
+  /** Step 1 — create admin account (returns token). */
+  @Post('register/account')
+  async registerAccount(@Body() body: any) {
+    return this.authService.registerAccount(body);
+  }
+
+  /** Step 2 — create company for the logged-in account. */
+  @UseGuards(JwtAuthGuard)
+  @Post('register/company')
+  async registerCompany(@Request() req, @Body() body: any) {
+    return this.authService.registerCompany(req.user.id, body);
+  }
+
+  /** Later wizard steps — save company fields as the user continues. */
+  @UseGuards(JwtAuthGuard)
+  @Patch('register/company')
+  async updateRegistrationCompany(@Request() req, @Body() body: any) {
+    return this.authService.updateRegistrationCompany(req.user.id, body);
+  }
+
   @UseGuards(JwtAuthGuard)
   @Post('switch-company')
   async switchCompany(@Request() req, @Body('companyId') companyId: string) {

@@ -213,104 +213,188 @@ export class AuthService {
     return filtered;
   }
 
+  async checkEmailAvailable(email: string) {
+    const normalized = (email || '').trim().toLowerCase();
+    if (!normalized) {
+      return { available: false, exists: true, message: 'Email is required' };
+    }
+
+    const [existingUser, existingCompany] = await Promise.all([
+      this.userService.findByEmail(normalized),
+      this.companyService.findByEmail(normalized),
+    ]);
+
+    if (existingUser || existingCompany) {
+      return {
+        available: false,
+        exists: true,
+        message: 'This email is already registered. Use a different email or log in.',
+      };
+    }
+
+    return { available: true, exists: false };
+  }
+
+  /** Step 1 — create admin account first (no company yet). */
+  async registerAccount(data: {
+    email: string;
+    password: string;
+    firstName: string;
+    lastName: string;
+    phone?: string;
+  }) {
+    const email = (data.email || '').trim().toLowerCase();
+    if (!email || !data.password || !data.firstName?.trim() || !data.lastName?.trim()) {
+      throw new BadRequestException('Name, email, and password are required.');
+    }
+
+    const emailCheck = await this.checkEmailAvailable(email);
+    if (!emailCheck.available) {
+      throw new BadRequestException(emailCheck.message);
+    }
+
+    const user = await this.userService.create({
+      email,
+      password: data.password,
+      firstName: data.firstName.trim(),
+      lastName: data.lastName.trim(),
+      phone: data.phone || undefined,
+      isActive: true,
+    });
+
+    const fresh = await this.userService.findById(user.id);
+    return this.login({ ...fresh, loginRole: 'admin' });
+  }
+
+  /** Step 2 — create company and attach the logged-in admin. */
+  async registerCompany(userId: string, data: any) {
+    const user = await this.userService.findById(userId);
+    if (!user) throw new BadRequestException('Account not found. Create your account first.');
+
+    if (user.company?.id) {
+      // Already has a company — treat as update
+      return this.updateRegistrationCompany(userId, data);
+    }
+
+    if (!data.companyName?.trim()) {
+      throw new BadRequestException('Company name is required.');
+    }
+
+    const companyEmail = (data.companyEmail || user.email || '').trim().toLowerCase();
+    const existingCompany = await this.companyService.findByEmail(companyEmail);
+    if (existingCompany) {
+      throw new BadRequestException(`Company with email ${companyEmail} is already registered.`);
+    }
+
+    const company = await this.companyService.create({
+      name: data.companyName,
+      website: data.companyWebsite,
+      industry: data.industry,
+      size: data.companySize,
+      logo: data.logo,
+      email: companyEmail,
+      address: data.companyAddress,
+      city: data.city,
+      postalCode: data.postalCode,
+      country: data.country,
+      timezone: data.timezone,
+      currency: data.currency,
+      workingDays: data.workingDays,
+      workingHoursStart: data.workingHoursStart,
+      workingHoursEnd: data.workingHoursEnd,
+      enableTimeTracking: data.enableTimeTracking,
+      enableScreenMonitoring: data.enableScreenMonitoring,
+      enablePayroll: data.enablePayroll,
+    });
+
+    await this.accessControlService.seedDefaultRolesForCompany(company.id);
+    await this.designationService.seedDefaultDesignations(company.id);
+
+    user.company = company;
+    if (!user.companies) user.companies = [];
+    if (!user.companies.some((c) => c.id === company.id)) {
+      user.companies.push(company);
+    }
+
+    try {
+      const allRoles = await this.accessControlService.findAllRoles(company.id);
+      const adminRole = allRoles.find((r) => r.name.toUpperCase() === 'ADMIN');
+      if (adminRole) {
+        if (!user.roles) user.roles = [];
+        if (!user.roles.some((r) => r.id === adminRole.id)) {
+          user.roles.push(adminRole);
+        }
+      }
+    } catch (roleError) {
+      console.error('[AuthService] Failed to assign ADMIN role:', roleError);
+    }
+
+    await this.userService.saveUser(user);
+    const fresh = await this.userService.findById(user.id);
+    return {
+      company,
+      ...(await this.login({ ...fresh, loginRole: 'admin' })),
+    };
+  }
+
+  /** Later steps — patch company fields as the wizard continues. */
+  async updateRegistrationCompany(userId: string, data: any) {
+    const user = await this.userService.findById(userId);
+    if (!user?.company?.id) {
+      throw new BadRequestException('Create your company first.');
+    }
+
+    const patch: Record<string, any> = {};
+    const map: Record<string, string> = {
+      companyName: 'name',
+      companyWebsite: 'website',
+      industry: 'industry',
+      companySize: 'size',
+      logo: 'logo',
+      companyAddress: 'address',
+      city: 'city',
+      postalCode: 'postalCode',
+      country: 'country',
+      timezone: 'timezone',
+      currency: 'currency',
+      workingDays: 'workingDays',
+      workingHoursStart: 'workingHoursStart',
+      workingHoursEnd: 'workingHoursEnd',
+      enableTimeTracking: 'enableTimeTracking',
+      enableScreenMonitoring: 'enableScreenMonitoring',
+      enablePayroll: 'enablePayroll',
+    };
+
+    Object.entries(map).forEach(([from, to]) => {
+      if (data[from] !== undefined && data[from] !== null && data[from] !== '') {
+        patch[to] = data[from];
+      }
+    });
+
+    if (Object.keys(patch).length === 0) {
+      return { company: user.company, message: 'Nothing to update' };
+    }
+
+    const company = await this.companyService.update(user.company.id, patch);
+    return { company, message: 'Saved' };
+  }
+
+  /** Full one-shot register (kept for compatibility). Prefer step APIs. */
   async register(data: any) {
     console.log('Registering with data:', JSON.stringify(data));
     try {
-      const emailToUse = data.companyEmail || data.email;
-
-      // Check if company already exists
-      const existingCompany = await this.companyService.findByEmail(emailToUse);
-      if (existingCompany) {
-        throw new BadRequestException(`Company with email ${emailToUse} is already registered.`);
-      }
-
-      // 1. Create Company
-      const company = await this.companyService.create({
-        name: data.companyName,
-        website: data.companyWebsite,
-        industry: data.industry,
-        size: data.companySize,
-        logo: data.logo,
-        email: data.companyEmail || data.email,
-        address: data.companyAddress,
-        city: data.city,
-        postalCode: data.postalCode,
-        country: data.country,
-        timezone: data.timezone,
-        currency: data.currency,
-        workingDays: data.workingDays,
-        workingHoursStart: data.workingHoursStart,
-        workingHoursEnd: data.workingHoursEnd,
-        enableTimeTracking: data.enableTimeTracking,
-        enableScreenMonitoring: data.enableScreenMonitoring,
-        enablePayroll: data.enablePayroll,
+      const account = await this.registerAccount({
+        email: data.email,
+        password: data.password,
+        firstName: data.firstName,
+        lastName: data.lastName,
+        phone: data.phone,
       });
 
-      // 1.5 Seed Default Roles for new company
-      await this.accessControlService.seedDefaultRolesForCompany(company.id);
-      await this.designationService.seedDefaultDesignations(company.id);
+      const userId = account.user?.id;
+      if (!userId) throw new BadRequestException('Account creation failed.');
 
-      // 2. Handle User association
-      let user = await this.userService.findByEmail(data.email);
-
-      if (user) {
-        // Link existing user to new company and switch to it
-        user.company = company;
-        if (!user.companies) user.companies = [];
-        // Avoid duplicates in companies list
-        if (!user.companies.some(c => c.id === company.id)) {
-          user.companies.push(company);
-        }
-        await this.userService.saveUser(user);
-      } else {
-        // Create new Admin User
-        user = await this.userService.create({
-          email: data.email,
-          password: data.password,
-          firstName: data.firstName,
-          lastName: data.lastName,
-          phone: data.phone,
-          companyId: company.id,
-          isActive: true,
-        });
-      }
-
-      // 3. Assign ADMIN role to the user for this company
-      try {
-        const allRoles = await this.accessControlService.findAllRoles(company.id);
-        const adminRole = allRoles.find(r => r.name.toUpperCase() === 'ADMIN');
-        if (adminRole) {
-          if (!user.roles) user.roles = [];
-          if (!user.roles.some(r => r.id === adminRole.id)) {
-            user.roles.push(adminRole);
-            await this.userService.saveUser(user);
-            console.log(`[AuthService] Assigned ADMIN role to user ${user.email} for company ${company.name}`);
-          }
-        }
-
-        // 4. Create Employee record for the founder
-        const existingEmployee = await this.employeeService.findByUserId(user.id);
-        if (!existingEmployee) {
-          console.log(`[AuthService] Creating employee record for founder: ${user.email}`);
-          await this.employeeService.create({
-            userId: user.id,
-            companyId: company.id,
-            employeeCode: `ADM-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
-            firstName: user.firstName,
-            lastName: user.lastName,
-            email: user.email,
-            phone: user.phone,
-            role: 'Admin',
-            status: 'active',
-            hireDate: new Date().toISOString(),
-          });
-        }
-      } catch (roleError) {
-        console.error('[AuthService] Failed to setup founder employee/role:', roleError);
-      }
-
-      // 5. Return full login response (token + user data)
-      return this.login(user);
+      return this.registerCompany(userId, data);
     } catch (error) {
       console.error('Registration Error:', error);
       throw error;

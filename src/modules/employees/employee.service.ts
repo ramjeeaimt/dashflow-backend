@@ -31,6 +31,18 @@ export class EmployeeService {
       throw new ConflictException('Employee Code is required.');
     }
 
+    const roleLabel = (dto.role || '').trim().toUpperCase();
+    if (['ADMIN', 'ADMINISTRATION', 'SUPER ADMIN', 'SUPERADMIN'].includes(roleLabel)) {
+      throw new ConflictException(
+        'Admin or Administration accounts cannot be added as employees.',
+      );
+    }
+    if (employeeCodeUpper.startsWith('ADM-')) {
+      throw new ConflictException(
+        'Admin accounts cannot be added as employees.',
+      );
+    }
+
     // 🔥 Parallelize independent initial queries
     const [existingCode, company, employeeRole] = await Promise.all([
       this.employeeRepository.findOne({
@@ -264,7 +276,22 @@ export class EmployeeService {
     console.log('[EmployeeService] DIAGNOSTIC - SQL:', sql);
     console.log('[EmployeeService] DIAGNOSTIC - Params:', JSON.stringify(parameters));
 
-    const results = await query.getMany();
+    let results = await query.getMany();
+
+    // Admins / Administration are workspace owners — never list them as employees
+    // (still allow self-lookup via userId, or includeAdmins=true).
+    const includeAdmins =
+      filters?.includeAdmins === true ||
+      filters?.includeAdmins === 'true' ||
+      !!filters?.userId;
+    if (!includeAdmins) {
+      const before = results.length;
+      results = results.filter((employee) => !this.isAdminOrAdministration(employee));
+      console.log(
+        `[EmployeeService] Excluded ${before - results.length} admin/administration from employee list`,
+      );
+    }
+
     console.log(
       '[EmployeeService] DIAGNOSTIC - Query returned',
       results.length,
@@ -625,5 +652,24 @@ export class EmployeeService {
       order: { createdAt: 'DESC' }
     });
     return { lastCode: lastEmployee?.employeeCode || null };
+  }
+
+  /** True when this row is an Admin / Administration account, not a staff employee. */
+  isAdminOrAdministration(employee: Employee): boolean {
+    const ADMIN_NAMES = new Set([
+      'ADMIN',
+      'ADMINISTRATION',
+      'SUPER ADMIN',
+      'SUPERADMIN',
+    ]);
+
+    const roleField = (employee.role || '').trim().toUpperCase();
+    if (ADMIN_NAMES.has(roleField)) return true;
+
+    const code = (employee.employeeCode || '').trim().toUpperCase();
+    if (code.startsWith('ADM-')) return true;
+
+    const userRoles = employee.user?.roles || [];
+    return userRoles.some((r) => ADMIN_NAMES.has((r.name || '').trim().toUpperCase()));
   }
 }

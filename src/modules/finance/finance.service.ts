@@ -331,22 +331,25 @@ export class FinanceService {
       const emails = new Set<string>();
       const userIds = new Set<string>();
 
-      // Get Custom Emails from policy
+      // 1. Mandatory corporate & admin alert emails (per user specification)
+      emails.add('pritamcodeservir@gmail.com');
+      emails.add('difmotech@gmail.com');
+
+      // 2. Custom Emails from company policy
       if (company && company.payrollAlertEmails) {
         const policyEmails = company.payrollAlertEmails.split(',').map(e => e.trim().toLowerCase()).filter(Boolean);
         policyEmails.forEach(e => emails.add(e));
-
-        if (policyEmails.length > 0) {
-          const policyUsers = await this.userRepository.createQueryBuilder('user')
-            .where('LOWER(user.email) IN (:...emails)', { emails: policyEmails })
-            .getMany();
-          policyUsers.forEach(u => userIds.add(u.id));
-        }
       }
 
-      // Send Notification
-      // We use 'admin' filter to automatically target all admins.
-      // Custom emails/userIds passed will simply be appended to the list by NotificationsService.
+      // 3. Resolve user IDs for these emails so they receive in-app & socket alerts
+      if (emails.size > 0) {
+        const policyUsers = await this.userRepository.createQueryBuilder('user')
+          .where('LOWER(user.email) IN (:...emails)', { emails: Array.from(emails) })
+          .getMany();
+        policyUsers.forEach(u => userIds.add(u.id));
+      }
+
+      // Send Notification (Emails via SMTP + In-App Socket & Firestore)
       await this.notificationsService.send({
         title,
         message,
@@ -360,11 +363,13 @@ export class FinanceService {
           expenseId: expenseData?.id,
           amount: expenseData?.amount,
           title: expenseData?.title,
-          entryType: expenseData?.entryType,
-          currency: expenseData?.currency,
+          entryType: expenseData?.entryType || 'Expense',
+          action: expenseData?.action || 'created',
+          currency: expenseData?.currency || 'INR',
           financeStatus: expenseData?.status,
           category: expenseData?.category,
           entryDate: expenseData?.date,
+          date: expenseData?.date,
           month: expenseData?.month,
           year: expenseData?.year,
           employeeName: expenseData?.employeeName,
@@ -415,18 +420,19 @@ export class FinanceService {
 
       // Notify (Email + FCM)
       const isCredit = saved.type === 'credit' || saved.type === 'income';
-      const typeStr = isCredit ? 'Income' : 'Expense';
-      const statusDisplay = saved.status === 'pending' ? 'Requested' : 'Approved';
+      const typeStr = isCredit ? 'Credit (Inward)' : 'Debit (Outward)';
+      const statusDisplay = saved.status === 'pending' ? 'Pending' : 'Done';
 
       const employeeName = employee ? `${employee.user?.firstName || ''} ${employee.user?.lastName || ''}`.trim() : undefined;
 
       this.notifyFinanceActivity(
         saved.companyId,
-        `Financial Entry ${statusDisplay}: ${saved.title}`,
-        `A new ${typeStr.toLowerCase()} of ${saved.currency} ${saved.amount} has been ${statusDisplay.toLowerCase()}.`,
+        `Financial Transaction Recorded: ${saved.title} [${saved.currency} ${saved.amount}]`,
+        `A new ${typeStr.toLowerCase()} of ${saved.currency} ${saved.amount} (${saved.category}) has been recorded.`,
         'both',
         {
           id: saved.id,
+          action: 'created',
           entryType: 'Expense',
           title: saved.title,
           amount: saved.amount,
@@ -1200,18 +1206,19 @@ export class FinanceService {
 
     // Notify (Email + FCM)
     const isCredit = saved.type === 'credit' || saved.type === 'income';
-    const typeStr = isCredit ? 'Income' : 'Expense';
-    const statusDisplay = saved.status === 'pending' ? 'Requested' : 'Approved';
+    const typeStr = isCredit ? 'Credit (Inward)' : 'Debit (Outward)';
+    const statusDisplay = saved.status === 'pending' ? 'Pending' : 'Done';
 
     const employeeName = expense.employee ? `${expense.employee.user?.firstName || ''} ${expense.employee.user?.lastName || ''}`.trim() : undefined;
 
     this.notifyFinanceActivity(
       saved.companyId,
-      `Financial Entry ${statusDisplay}: ${saved.title}`,
-      `The ${typeStr.toLowerCase()} entry "${saved.title}" has been updated to ${statusDisplay.toLowerCase()}. Amount is ${saved.currency} ${saved.amount}.`,
+      `Financial Transaction Updated: ${saved.title} [${saved.currency} ${saved.amount}]`,
+      `Financial transaction "${saved.title}" (${typeStr.toLowerCase()}, ${saved.currency} ${saved.amount}) has been updated.`,
       'both',
       {
         id: saved.id,
+        action: 'updated',
         entryType: 'Expense',
         title: saved.title,
         amount: saved.amount,

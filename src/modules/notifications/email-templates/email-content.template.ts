@@ -158,88 +158,127 @@ export function getFinanceUpdateContent(
     metadata: any,
     appUrl: string,
 ): string {
+    const isCredit = (metadata.financeType || '').toLowerCase() === 'credit' || (metadata.financeType || '').toLowerCase() === 'income';
     const isApproved = metadata.financeStatus?.toLowerCase() === 'approved';
     const statusColor = isApproved ? '#10b981' : '#f59e0b';
+    const statusText = isApproved ? 'Approved / Done' : (metadata.financeStatus?.toUpperCase() || 'PENDING');
+    const currency = metadata.currency || 'INR';
+    const currencySymbol = currency === 'INR' ? '₹' : (currency === 'USD' ? '$' : currency);
+    const amountVal = Number(metadata.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const isUpdate = metadata.action === 'updated';
 
     let breakdownHtml = '';
 
     if (metadata.entryType === 'Payroll') {
         breakdownHtml = `
-            <div style="margin: 25px 0; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px; background-color: #fff;">
+            <div style="margin: 25px 0; padding: 20px; border: 1px solid #e2e8f0; border-radius: 10px; background-color: #fff;">
                 <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
                     <tr>
-                        <td style="color: #64748b; font-size: 14px; padding: 8px 0; border-bottom: 1px solid #f1f5f9;">Employee</td>
-                        <td style="color: #0f172a; font-size: 14px; padding: 8px 0; text-align: right; font-weight: 700; border-bottom: 1px solid #f1f5f9;">${metadata.employeeName || 'N/A'}</td>
+                        <td style="color: #64748b; font-size: 14px; padding: 10px 0; border-bottom: 1px solid #f1f5f9;">Employee</td>
+                        <td style="color: #0f172a; font-size: 14px; padding: 10px 0; text-align: right; font-weight: 700; border-bottom: 1px solid #f1f5f9;">${metadata.employeeName || 'N/A'}</td>
                     </tr>
                     <tr>
-                        <td style="color: #64748b; font-size: 14px; padding: 8px 0; border-bottom: 1px solid #f1f5f9;">Period</td>
-                        <td style="color: #0f172a; font-size: 14px; padding: 8px 0; text-align: right; font-weight: 700; border-bottom: 1px solid #f1f5f9;">${metadata.month}/${metadata.year}</td>
+                        <td style="color: #64748b; font-size: 14px; padding: 10px 0; border-bottom: 1px solid #f1f5f9;">Period</td>
+                        <td style="color: #0f172a; font-size: 14px; padding: 10px 0; text-align: right; font-weight: 700; border-bottom: 1px solid #f1f5f9;">${metadata.month}/${metadata.year}</td>
                     </tr>
                     ${metadata.description ? `
                     <tr>
-                        <td colspan="2" style="padding: 15px 0; border-bottom: 1px solid #f1f5f9;">
-                            <div style="color: #64748b; font-size: 14px; margin-bottom: 6px;">Notes</div>
+                        <td colspan="2" style="padding: 12px 0; border-bottom: 1px solid #f1f5f9;">
+                            <div style="color: #64748b; font-size: 13px; margin-bottom: 4px;">Notes</div>
                             <div style="color: #0f172a; font-size: 14px; line-height: 1.6; text-align: left; font-weight: 400;">${metadata.description}</div>
                         </td>
                     </tr>` : ''}
                     <tr>
-                        <td style="color: #64748b; font-size: 14px; padding: 8px 0; border-bottom: 1px solid #f1f5f9;">Status</td>
-                        <td style="color: ${statusColor}; font-size: 14px; padding: 8px 0; text-align: right; font-weight: 700; border-bottom: 1px solid #f1f5f9;">${metadata.financeStatus?.toUpperCase() || 'PENDING'}</td>
+                        <td style="color: #64748b; font-size: 14px; padding: 10px 0; border-bottom: 1px solid #f1f5f9;">Status</td>
+                        <td style="color: ${statusColor}; font-size: 14px; padding: 10px 0; text-align: right; font-weight: 700; border-bottom: 1px solid #f1f5f9;">${statusText}</td>
                     </tr>
                     <tr>
-                        <td style="color: #0f172a; font-size: 16px; padding: 15px 0 5px 0; font-weight: 800;">Amount</td>
-                        <td style="color: #0f172a; font-size: 20px; padding: 15px 0 5px 0; text-align: right; font-weight: 900;">${metadata.currency || 'INR'} ${Number(metadata.amount || 0).toFixed(2)}</td>
+                        <td style="color: #0f172a; font-size: 15px; padding: 14px 0 4px 0; font-weight: 800;">Net Amount</td>
+                        <td style="color: #0f172a; font-size: 20px; padding: 14px 0 4px 0; text-align: right; font-weight: 900;">${currencySymbol}${amountVal}</td>
                     </tr>
                 </table>
             </div>
         `;
     } else {
-        // Normal Entry (Expense/Income)
+        // Normal Financial Entry (Income / Expense)
+        const typeBg = isCredit ? '#f0fdf4' : '#fef2f2';
+        const typeBorder = isCredit ? '#bbf7d0' : '#fecaca';
+        const typeColor = isCredit ? '#15803d' : '#b91c1c';
+        const typeBadgeBg = isCredit ? '#dcfce7' : '#fee2e2';
+        const typeLabel = isCredit ? 'CREDIT (INCOME / INFLOW)' : 'DEBIT (EXPENSE / OUTFLOW)';
+        const amountPrefix = isCredit ? '+' : '-';
+
         breakdownHtml = `
-            <div style="margin: 25px 0; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px; background-color: #fff;">
+            <!-- Highlight Card -->
+            <div style="margin: 20px 0; padding: 22px; border-radius: 12px; border: 1px solid ${typeBorder}; background-color: ${typeBg};">
                 <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
                     <tr>
-                        <td style="color: #64748b; font-size: 14px; padding: 8px 0; border-bottom: 1px solid #f1f5f9;">Title</td>
-                        <td style="color: #0f172a; font-size: 14px; padding: 8px 0; text-align: right; font-weight: 700; border-bottom: 1px solid #f1f5f9;">${metadata.title || 'N/A'}</td>
+                        <td align="left">
+                            <span style="display: inline-block; padding: 5px 12px; border-radius: 6px; font-size: 11px; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase; background-color: ${typeBadgeBg}; color: ${typeColor};">
+                                ${typeLabel}
+                            </span>
+                        </td>
+                        <td align="right">
+                            <span style="font-size: 12px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">
+                                ${isUpdate ? 'Updated' : 'Recorded'}
+                            </span>
+                        </td>
                     </tr>
                     <tr>
-                        <td style="color: #64748b; font-size: 14px; padding: 8px 0; border-bottom: 1px solid #f1f5f9;">Type</td>
-                        <td style="color: #0f172a; font-size: 14px; padding: 8px 0; text-align: right; font-weight: 700; border-bottom: 1px solid #f1f5f9; text-transform: capitalize;">${metadata.financeType || 'Expense'}</td>
+                        <td colspan="2" style="padding-top: 14px;">
+                            <div style="font-size: 30px; font-weight: 900; color: ${typeColor}; line-height: 1.2;">
+                                ${amountPrefix}${currencySymbol}${amountVal}
+                            </div>
+                            <div style="font-size: 16px; font-weight: 700; color: #0f172a; margin-top: 6px;">
+                                ${metadata.title || 'Untitled Transaction'}
+                            </div>
+                        </td>
                     </tr>
+                </table>
+            </div>
+
+            <!-- Transaction Details Table -->
+            <div style="margin: 20px 0; padding: 18px 20px; border: 1px solid #e2e8f0; border-radius: 10px; background-color: #fff;">
+                <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
                     <tr>
                         <td style="color: #64748b; font-size: 14px; padding: 8px 0; border-bottom: 1px solid #f1f5f9;">Category</td>
-                        <td style="color: #0f172a; font-size: 14px; padding: 8px 0; text-align: right; font-weight: 700; border-bottom: 1px solid #f1f5f9; text-transform: capitalize;">${metadata.category || 'General'}</td>
+                        <td style="color: #0f172a; font-size: 14px; padding: 8px 0; text-align: right; font-weight: 700; border-bottom: 1px solid #f1f5f9;">${metadata.category || 'Operating'}</td>
                     </tr>
-                    ${metadata.description ? `
                     <tr>
-                        <td colspan="2" style="padding: 15px 0; border-bottom: 1px solid #f1f5f9;">
-                            <div style="color: #64748b; font-size: 14px; margin-bottom: 6px;">Description</div>
-                            <div style="color: #0f172a; font-size: 14px; line-height: 1.6; text-align: left; font-weight: 400;">${metadata.description}</div>
-                        </td>
+                        <td style="color: #64748b; font-size: 14px; padding: 8px 0; border-bottom: 1px solid #f1f5f9;">Date</td>
+                        <td style="color: #0f172a; font-size: 14px; padding: 8px 0; text-align: right; font-weight: 600; border-bottom: 1px solid #f1f5f9;">${metadata.entryDate || metadata.date || 'Today'}</td>
+                    </tr>
+                    ${metadata.employeeName ? `
+                    <tr>
+                        <td style="color: #64748b; font-size: 14px; padding: 8px 0; border-bottom: 1px solid #f1f5f9;">Recorded By</td>
+                        <td style="color: #0f172a; font-size: 14px; padding: 8px 0; text-align: right; font-weight: 600; border-bottom: 1px solid #f1f5f9;">${metadata.employeeName}</td>
                     </tr>` : ''}
                     <tr>
                         <td style="color: #64748b; font-size: 14px; padding: 8px 0; border-bottom: 1px solid #f1f5f9;">Status</td>
-                        <td style="color: ${statusColor}; font-size: 14px; padding: 8px 0; text-align: right; font-weight: 700; border-bottom: 1px solid #f1f5f9;">${metadata.financeStatus?.toUpperCase() || 'PENDING'}</td>
+                        <td style="color: ${statusColor}; font-size: 14px; padding: 8px 0; text-align: right; font-weight: 700; border-bottom: 1px solid #f1f5f9;">${statusText}</td>
                     </tr>
+                    ${metadata.description ? `
                     <tr>
-                        <td style="color: #0f172a; font-size: 16px; padding: 15px 0 5px 0; font-weight: 800;">Amount</td>
-                        <td style="color: #0f172a; font-size: 20px; padding: 15px 0 5px 0; text-align: right; font-weight: 900;">${metadata.currency || 'USD'} ${Number(metadata.amount || 0).toFixed(2)}</td>
-                    </tr>
+                        <td colspan="2" style="padding-top: 12px;">
+                            <div style="color: #64748b; font-size: 12px; font-weight: 600; text-transform: uppercase; margin-bottom: 4px;">Description / Notes</div>
+                            <div style="color: #334155; font-size: 14px; line-height: 1.6; background-color: #f8fafc; padding: 10px 12px; border-radius: 6px; border: 1px solid #f1f5f9;">${metadata.description}</div>
+                        </td>
+                    </tr>` : ''}
                 </table>
             </div>
         `;
     }
 
     return `
-        <div style="border-left: 4px solid #4338ca; padding: 20px; background-color: #f8fafc; margin: 20px 0;">
-            <h3 style="color: #4338ca; margin-top: 0; font-size: 20px;">Finance Dashboard Update</h3>
-            <p style="color: #334155; font-size: 16px; margin-bottom: 0;">${message}</p>
+        <div style="border-left: 4px solid #000; padding: 18px 20px; background-color: #f8fafc; margin: 15px 0 20px 0; border-radius: 4px;">
+            <h3 style="color: #000; margin: 0 0 6px 0; font-size: 18px; font-weight: 800;">Corporate Financial Alert</h3>
+            <p style="color: #475569; font-size: 15px; margin: 0; line-height: 1.5;">${message}</p>
         </div>
         ${breakdownHtml}
-        <div style="margin-top: 30px;">
+        <div style="margin-top: 26px;">
             <a href="${appUrl}/finance"
-               style="background-color: #0f172a; color: white; padding: 12px 25px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: 600;">
-                View in Dashboard
+               style="background-color: #000; color: #fff; padding: 12px 24px; text-decoration: none; border-radius: 8px; display: inline-block; font-weight: 700; font-size: 14px; letter-spacing: 0.3px;">
+                Open DashFlow Finance &rarr;
             </a>
         </div>
     `;
@@ -400,7 +439,6 @@ export function getSpecializedContent(
     metadata: any,
     appUrl: string,
 ): string {
-    require('fs').appendFileSync('debug-notification.log', `[${new Date().toISOString()}] getSpecializedContent: rendering type ${type}\n`);
     try {
         switch (type) {
             case 'WELCOME':
@@ -432,7 +470,7 @@ export function getSpecializedContent(
                 return getDefaultContent(message);
         }
     } catch (e) {
-        require('fs').appendFileSync('debug-notification.log', `[${new Date().toISOString()}] getSpecializedContent crashed: ${e.message}\n${e.stack}\n`);
+        console.error(`[email-content.template] getSpecializedContent failed for ${type}:`, e);
         return getDefaultContent(message);
     }
 }
