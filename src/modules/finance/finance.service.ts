@@ -464,9 +464,11 @@ export class FinanceService {
 
   async generateMonthlyPayroll(month: number, year: number, companyId: string, employeeId?: string) {
     // Get all employees with company relation to read policy settings
-    const whereClause: any = { companyId };
+    const whereClause: any = { companyId, isDeleted: false };
     if (employeeId) {
       whereClause.id = employeeId;
+    } else {
+      whereClause.status = In(['active', 'Active']);
     }
     const employees = await this.employeeRepository.find({
       where: whereClause,
@@ -513,11 +515,8 @@ export class FinanceService {
       if (existing) {
         if (existing.status === 'sent' || existing.status === 'paid') {
           continue; // Skip if already finalized
-        } else if (!employeeId) {
-          // If bulk generating (no specific employee), skip existing drafts!
-          continue;
         } else {
-          // If generating for a specific employee, remove the draft to recalculate
+          // Recalculate draft so updated attendance, half-day penalties, or leave adjustments apply
           await this.payrollRepository.remove(existing);
         }
       }
