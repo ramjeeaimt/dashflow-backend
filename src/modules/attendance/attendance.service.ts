@@ -728,7 +728,10 @@ export class AttendanceService {
     // default is lowercase 'pending', so both casings exist in the table.
     const isApproved = (status: string) => String(status).toUpperCase() === 'APPROVED';
     const approvedLeaves = leaves.filter((l) => isApproved(l.status));
+    const isRejected = (status: string) => String(status).toUpperCase() === 'REJECTED';
+    const rejectedLeaves = leaves.filter((l) => isRejected(l.status));
     const approvedWfh = wfhRequests.filter((w) => isApproved(w.status));
+
 
     const company = employee.company;
     const saturdayRule = company?.saturdayRule || 'second_saturday_half_day';
@@ -769,6 +772,9 @@ export class AttendanceService {
       const weekday = new Date(`${date}T00:00:00`).getDay();
       const record = byDate.get(date) || null;
       const leave = approvedLeaves.find(
+        (l) => toDateString(l.startDate) <= date && toDateString(l.endDate) >= date,
+      );
+      const rejectedLeave = rejectedLeaves.find(
         (l) => toDateString(l.startDate) <= date && toDateString(l.endDate) >= date,
       );
       const wfhRequest = approvedWfh.find(
@@ -854,6 +860,8 @@ export class AttendanceService {
           ? `Holiday: ${holiday.name}`
           : (isSaturday && saturdayPolicy === 'half_day')
           ? `${saturdayIndex === 2 ? '2nd Saturday' : 'Saturday'} (Half Day)`
+          : (rejectedLeave && !record)
+          ? 'Absent (Leave Rejected: 2 Days Salary Deduction)'
           : null,
         isWfh: isWfhDay,
         wfh: wfhRequest
@@ -876,6 +884,19 @@ export class AttendanceService {
               startDate: toDateString(leave.startDate),
               endDate: toDateString(leave.endDate),
               adminComment: leave.adminComment || null,
+            }
+          : null,
+        isLeaveRejected: Boolean(rejectedLeave),
+        rejectedLeave: rejectedLeave
+          ? {
+              id: rejectedLeave.id,
+              type: rejectedLeave.type,
+              reason: rejectedLeave.reason,
+              startDate: toDateString(rejectedLeave.startDate),
+              endDate: toDateString(rejectedLeave.endDate),
+              adminComment: rejectedLeave.adminComment || 'Deduct two days of salary',
+              reviewedByName: (rejectedLeave as any).reviewedByName || 'Admin',
+              deductDays: Number((rejectedLeave as any).deductDays) || 2,
             }
           : null,
       });

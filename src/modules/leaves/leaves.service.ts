@@ -159,11 +159,23 @@ export class LeavesService {
     const leave = await this.findOne(id);
 
     leave.status = dto.status.toUpperCase();
-    if (dto.adminComment) {
+    if (dto.adminComment !== undefined) {
       leave.adminComment = dto.adminComment;
+    }
+    if (dto.reviewedBy) {
+      leave.reviewedBy = dto.reviewedBy;
+    }
+    if (dto.reviewedByName) {
+      leave.reviewedByName = dto.reviewedByName;
+    }
+    if (dto.deductDays !== undefined) {
+      leave.deductDays = dto.deductDays;
+    } else if (leave.status === 'REJECTED') {
+      leave.deductDays = 2;
     }
 
     const updatedLeave = await this.leavesRepository.save(leave);
+
 
     // Auto-generate Attendance records if leave is APPROVED
     if (updatedLeave.status === 'APPROVED') {

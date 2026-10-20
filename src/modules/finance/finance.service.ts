@@ -8,6 +8,7 @@ import { Project } from '../projects/entities/project.entity';
 import { Employee } from '../employees/employee.entity';
 import { Attendance } from '../attendance/attendance.entity';
 import { User } from '../users/user.entity';
+import { Leave } from '../leaves/leave.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
@@ -15,7 +16,11 @@ import puppeteer from 'puppeteer-core';
 const chromium = require('@sparticuz/chromium');
 const PDFDocument = require('pdfkit');
 
-import { Settings } from 'http2';
+function toDateString(value: Date | string): string {
+  if (!value) return '';
+  if (typeof value === 'string') return value.slice(0, 10);
+  return value.toLocaleDateString('en-CA');
+}
 
 @Injectable()
 export class FinanceService {
@@ -37,6 +42,9 @@ export class FinanceService {
 
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+
+    @InjectRepository(Leave)
+    private readonly leaveRepository: Repository<Leave>,
 
     private readonly notificationsService: NotificationsService,
 
@@ -479,18 +487,25 @@ export class FinanceService {
     // Bulk prefetch (2 queries) instead of 2 queries per employee. Month/year
     // filtering of attendance stays in JS below — identical results to before.
     const employeeIds = employees.map((e) => e.id);
-    const [existingPayrolls, allAttendance] = employeeIds.length
+    const [existingPayrolls, allAttendance, allLeaves] = employeeIds.length
       ? await Promise.all([
           this.payrollRepository.find({ where: { employeeId: In(employeeIds), month, year } }),
           this.attendanceRepository.find({ where: { employeeId: In(employeeIds) } }),
+          this.leaveRepository.find({ where: { employeeId: In(employeeIds) } }),
         ])
-      : [[], []];
+      : [[], [], []];
     const payrollByEmployee = new Map(existingPayrolls.map((p) => [p.employeeId, p]));
     const attendanceByEmployee = new Map<string, typeof allAttendance>();
     for (const att of allAttendance) {
       const list = attendanceByEmployee.get(att.employeeId);
       if (list) list.push(att);
       else attendanceByEmployee.set(att.employeeId, [att]);
+    }
+    const leavesByEmployee = new Map<string, typeof allLeaves>();
+    for (const lv of allLeaves) {
+      const list = leavesByEmployee.get(lv.employeeId);
+      if (list) list.push(lv);
+      else leavesByEmployee.set(lv.employeeId, [lv]);
     }
 
     for (const emp of employees) {
@@ -576,15 +591,53 @@ export class FinanceService {
 
       const perDay = exactWorkingDaysInMonth > 0 ? (basicSalary / exactWorkingDaysInMonth) : 0;
 
+      // Identify rejected leaves and check if employee was absent on those days
+      const empLeaves = leavesByEmployee.get(emp.id) ?? [];
+      const rejectedLeaves = empLeaves.filter((lv) => (lv.status || '').toUpperCase() === 'REJECTED');
+
+      const rejectedAbsentDates = new Set<string>();
+      let rejectedLeaveDeductionDays = 0;
+
+      for (const rLv of rejectedLeaves) {
+        if (!rLv.startDate || !rLv.endDate) continue;
+        const startStr = toDateString(rLv.startDate);
+        const endStr = toDateString(rLv.endDate);
+        const deductPerDay = Number(rLv.deductDays) || 2; // Default to 2 days deduction penalty for unapproved absence
+
+        const cur = new Date(`${startStr}T00:00:00`);
+        const end = new Date(`${endStr}T00:00:00`);
+
+        while (cur <= end) {
+          const dateStr = toDateString(cur);
+          const [dY, dM] = dateStr.split('-').map(Number);
+          if (dM === month && dY === year) {
+            const dayAtt = attendance.find((a) => toDateString(a.date) === dateStr);
+            const isAttended = dayAtt && ['present', 'late', 'early_checkin', 'early_departure', 'wfh'].includes(dayAtt.status);
+            if (!isAttended) {
+              if (!rejectedAbsentDates.has(dateStr)) {
+                rejectedAbsentDates.add(dateStr);
+                rejectedLeaveDeductionDays += deductPerDay;
+              }
+            }
+          }
+          cur.setDate(cur.getDate() + 1);
+        }
+      }
+
       // Use company-configured half-day pay percent if available, else default to 50%
       const halfPercent = Number(emp.company?.halfDayPayPercent) || defaultHalfPercent;
       const casualLeavesPerYear = Number(emp.company?.casualLeavesPerYear) || 12;
       const freeLeaves = (presentDays === 0 && halfDays === 0) ? 0 : (casualLeavesPerYear / 12);
 
-      // Leaves deduction logic: group Absent and Leave together to consume Free CL
+      // Leaves deduction logic:
+      // Rejected absent days carry the 2-day penalty and cannot consume Free CL
       const totalMissedDays = leaveDays + absentDays;
-      const unpaidMissedDays = Math.max(0, totalMissedDays - freeLeaves);
-      const leaveDeduction = Number(unpaidMissedDays * perDay) || 0;
+      const normalMissedDays = Math.max(0, totalMissedDays - rejectedAbsentDates.size);
+      const unpaidNormalMissedDays = Math.max(0, normalMissedDays - freeLeaves);
+      const normalLeaveDeduction = Number(unpaidNormalMissedDays * perDay) || 0;
+      const rejectedLeaveDeductionAmount = Number(rejectedLeaveDeductionDays * perDay) || 0;
+      const leaveDeduction = normalLeaveDeduction + rejectedLeaveDeductionAmount;
+      const unpaidMissedDays = unpaidNormalMissedDays + rejectedLeaveDeductionDays;
 
       // Half-day deduction: regular half-days + late arrivals (if late deduction not waived by admin)
       const regularHalfDeduction = Number(halfDays * (perDay * (halfPercent / 100))) || 0;
@@ -635,6 +688,8 @@ export class FinanceService {
         lateCount: lateDays,
         lateDeductionCount: lateDeductionDays,
         lateDeductionAmount: Math.round(lateDeductionAmount),
+        rejectedLeaveDeductionDays,
+        rejectedLeaveDeductionAmount: Math.round(rejectedLeaveDeductionAmount),
         overtime: Math.round(overtimePay),
         netSalary: Math.round(netSalary),
         month,
@@ -643,7 +698,7 @@ export class FinanceService {
         workDays: presentDays + halfDays,
         holidaysCount,
         halfDaysCount,
-        paidLeaves: Math.min(totalMissedDays, freeLeaves),
+        paidLeaves: Math.min(normalMissedDays, freeLeaves),
         unpaidLeaves: unpaidMissedDays,
         workingHoursPerDay: Math.round(defaultWorkingHours),
         overtimeRate: Math.round(dynamicOvertimeRate),

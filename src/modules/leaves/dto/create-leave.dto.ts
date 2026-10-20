@@ -39,4 +39,16 @@ export class UpdateLeaveStatusDto {
   @IsString()
   @IsOptional()
   adminComment?: string;
+
+  @IsString()
+  @IsOptional()
+  reviewedBy?: string;
+
+  @IsString()
+  @IsOptional()
+  reviewedByName?: string;
+
+  @IsOptional()
+  deductDays?: number;
 }
+

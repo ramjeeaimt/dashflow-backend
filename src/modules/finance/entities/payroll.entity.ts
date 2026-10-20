@@ -110,6 +110,12 @@ export class Payroll {
   @Column({ type: 'float', default: 0 })
   lateDeductionAmount: number;
 
+  @Column({ type: 'float', default: 0 })
+  rejectedLeaveDeductionDays: number;
+
+  @Column({ type: 'float', default: 0 })
+  rejectedLeaveDeductionAmount: number;
+
   @Column({ type: 'text', nullable: true })
   notes: string;
 

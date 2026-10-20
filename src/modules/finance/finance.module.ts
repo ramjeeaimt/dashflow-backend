@@ -13,10 +13,11 @@ import { Attendance } from '../attendance/attendance.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
 
 import { User } from '../users/user.entity';
+import { Leave } from '../leaves/leave.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Payroll, Expense, Attendance, Company, Employee, User]),
+    TypeOrmModule.forFeature([Payroll, Expense, Attendance, Company, Employee, User, Leave]),
     AccessControlModule,
     NotificationsModule,
   ],

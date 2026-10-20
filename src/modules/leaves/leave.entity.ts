@@ -50,9 +50,24 @@ export class Leave {
   @IsOptional()
   adminComment?: string;
 
+  @Column({ nullable: true })
+  @IsString()
+  @IsOptional()
+  reviewedBy?: string;
+
+  @Column({ nullable: true })
+  @IsString()
+  @IsOptional()
+  reviewedByName?: string;
+
+  @Column({ type: 'numeric', default: 1, nullable: true })
+  @IsOptional()
+  deductDays?: number;
+
   @CreateDateColumn()
   createdAt: Date;
 
   @UpdateDateColumn()
   updatedAt: Date;
 }
+
