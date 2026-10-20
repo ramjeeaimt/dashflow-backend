@@ -800,10 +800,15 @@ export class AttendanceService {
       const isWeekend = isSunday || (!isScheduledWorkingDay && !isSaturday) || (isSaturday && saturdayPolicy === 'off');
       const isFuture = date > today;
 
+      // Detect if employee punched in on a past day but never punched out (unclosed punch)
+      const isMissingCheckout = Boolean(
+        record && record.checkInTime && !record.checkOutTime && date < today
+      );
+
       // Precedence: a real punch beats everything, then leave, then holiday, then saturday half day, then weekend.
       let type: string;
       if (record) {
-        if (record.status === 'half-day' || (isSaturday && saturdayPolicy === 'half_day')) {
+        if (record.status === 'half-day' || isMissingCheckout || (isSaturday && saturdayPolicy === 'half_day')) {
           type = 'half-day';
         } else {
           type = record.status;
@@ -836,6 +841,7 @@ export class AttendanceService {
         type,
         checkInTime: record?.checkInTime || null,
         checkOutTime: record?.checkOutTime || null,
+        isMissingCheckout,
         workHours: record?.workHours != null ? Number(record.workHours) : null,
         overtime: record?.overtime != null ? Number(record.overtime) : null,
         location: record?.location || null,
@@ -862,6 +868,8 @@ export class AttendanceService {
           ? `${saturdayIndex === 2 ? '2nd Saturday' : 'Saturday'} (Half Day)`
           : (rejectedLeave && !record)
           ? 'Absent (Leave Rejected: 2 Days Salary Deduction)'
+          : isMissingCheckout
+          ? 'Half Day (No Check-out)'
           : null,
         isWfh: isWfhDay,
         wfh: wfhRequest

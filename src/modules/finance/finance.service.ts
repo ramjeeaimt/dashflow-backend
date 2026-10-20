@@ -551,7 +551,14 @@ export class FinanceService {
           }
         }
 
-        if (['present', 'late', 'early_checkin', 'early_departure', 'wfh'].includes(att.status)) {
+        const attDateStr = toDateString(att.date);
+        const todayStr = new Date().toLocaleDateString('en-CA');
+        // If employee punched in on a past day but never punched out, penalize as a Half Day
+        const isMissingCheckout = att.checkInTime && !att.checkOutTime && attDateStr < todayStr;
+
+        if (isMissingCheckout) {
+          halfDays++;
+        } else if (['present', 'late', 'early_checkin', 'early_departure', 'wfh'].includes(att.status)) {
           presentDays++;
 
           if (att.status === 'late') {
@@ -569,7 +576,7 @@ export class FinanceService {
             totalDailyUndertime += (defaultWorkingHours - hoursWorked);
           }
         }
-        if (att.status === 'half-day') halfDays++;
+        if (att.status === 'half-day' && !isMissingCheckout) halfDays++;
         if (att.status === 'leave') leaveDays++;
         if (att.status === 'absent') absentDays++;
       }
