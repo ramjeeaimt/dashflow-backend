@@ -31,25 +31,28 @@ export class TransformInterceptor<T>
     const { method, originalUrl, body, params, query } = request;
     const startTime = Date.now();
 
-    // Log Request with Body
+    // Log Request with Body (mask passwords)
+    const sanitizedBody = body && typeof body === 'object'
+      ? { ...body, ...(body.password ? { password: '***' } : {}) }
+      : body;
+
     this.logger.log('\n' + JSON.stringify({ 
       event: 'incoming_request_data', 
       method, 
       originalUrl, 
-      requestBody: Object.keys(body || {}).length ? body : undefined 
+      requestBody: Object.keys(sanitizedBody || {}).length ? sanitizedBody : undefined 
     }, null, 2));
 
     return next.handle().pipe(
-      tap((data) => {
+      tap(() => {
         const responseTime = Date.now() - startTime;
-        // Log Response with Data
+        // Log Response summary without blocking stdout with massive payloads
         this.logger.log('\n' + JSON.stringify({ 
           event: 'outgoing_response_data', 
           method, 
           originalUrl, 
           statusCode: response.statusCode, 
           responseTimeMs: responseTime, 
-          responseData: data 
         }, null, 2));
       }),
       map((data) => ({
