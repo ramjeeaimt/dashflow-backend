@@ -1,12 +1,12 @@
-import { NestFactory } from '@nestjs/core';
-import { AppModule } from './app.module';
-import { setupApp } from './setup';
-
 let server: any = null;
 
 async function bootstrap() {
   if (server) return server;
-  console.log('[Serverless] Initializing Nest application...');
+  console.log('[Serverless] Dynamically loading NestJS modules...');
+  const { NestFactory } = await import('@nestjs/core');
+  const { AppModule } = await import('./app.module');
+  const { setupApp } = await import('./setup');
+
   const app = await NestFactory.create(AppModule, {
     logger: ['error', 'warn', 'log'],
   });
@@ -17,8 +17,7 @@ async function bootstrap() {
   return server;
 }
 
-const handler = async (req: any, res: any) => {
-  // Set CORS headers for all requests
+export default async function handler(req: any, res: any) {
   const allowedOrigins = [
     'https://dashflow-frontend.vercel.app',
     'https://dashflow-backend.vercel.app',
@@ -47,12 +46,20 @@ const handler = async (req: any, res: any) => {
     return res.status(200).end();
   }
 
+  if (req.url === '/api/ping' || req.url === '/ping') {
+    return res.status(200).json({
+      status: 'pong',
+      node: process.version,
+      env: process.env.NODE_ENV,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
   try {
     const appInstance = await bootstrap();
     return appInstance(req, res);
   } catch (error: any) {
     console.error('SERVERLESS_BOOTSTRAP_ERROR:', error);
-    // Reset server so retry can re-attempt initialization
     server = null;
     if (!res.headersSent) {
       return res.status(500).json({
@@ -63,6 +70,4 @@ const handler = async (req: any, res: any) => {
       });
     }
   }
-};
-
-export default handler;
+}
