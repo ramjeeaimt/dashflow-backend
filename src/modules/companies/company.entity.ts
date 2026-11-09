@@ -137,6 +137,7 @@ export class Company {
     date: string;
     type: 'full' | 'half';
     description?: string;
+    category?: string;
   }>;
 
   // ── Finance & Payroll Policies ─────────────────────────────────────

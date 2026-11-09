@@ -365,6 +365,7 @@ export class EmployeeService {
         'designationId',
         'role',
         'hireDate',
+        'dateOfBirth',
         'salary',
         'manager',
         'branch',

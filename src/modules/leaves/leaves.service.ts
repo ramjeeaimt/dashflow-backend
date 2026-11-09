@@ -66,10 +66,15 @@ export class LeavesService {
     const savedLeave = await this.leavesRepository.save(leave);
 
     try {
+      const empFullName = employee.user 
+        ? `${employee.user.firstName || ''} ${employee.user.lastName || ''}`.trim() || employee.user.firstName || 'An employee'
+        : 'An employee';
+
       this.eventEmitter.emit('leave.requested', {
         leaveId: savedLeave.id,
         employeeId: employee.id,
-        employeeName: employee.user?.firstName || 'An employee',
+        employeeName: empFullName,
+        employeeEmail: employee.user?.email,
         startDate: createLeaveDto.startDate,
         endDate: createLeaveDto.endDate,
         reason: createLeaveDto.reason,

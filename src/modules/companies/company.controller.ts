@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Put,
   Body,
   Param,
   Patch,
@@ -35,6 +36,50 @@ export class CompanyController {
     }
     
     return this.companyService.findAll(true);
+  }
+
+  // ── Holiday Calendar Endpoints ─────────────────────────────────────
+  @Get('id/:id/holidays')
+  @UseGuards(JwtAuthGuard)
+  getHolidaysById(@Param('id') id: string) {
+    return this.companyService.getHolidays(id);
+  }
+
+  @Get(':id/holidays')
+  @UseGuards(JwtAuthGuard)
+  getHolidays(@Param('id') id: string) {
+    return this.companyService.getHolidays(id);
+  }
+
+  @Post(':id/holidays')
+  @UseGuards(JwtAuthGuard)
+  addHoliday(@Param('id') id: string, @Body() holidayDto: any) {
+    return this.companyService.addHoliday(id, holidayDto);
+  }
+
+  @Put(':id/holidays')
+  @UseGuards(JwtAuthGuard)
+  setHolidays(@Param('id') id: string, @Body() body: { holidays: any[] }) {
+    return this.companyService.bulkSaveHolidays(id, body?.holidays || []);
+  }
+
+  @Patch(':id/holidays/:holidayId')
+  @UseGuards(JwtAuthGuard)
+  updateHoliday(
+    @Param('id') id: string,
+    @Param('holidayId') holidayId: string,
+    @Body() holidayDto: any,
+  ) {
+    return this.companyService.updateHoliday(id, holidayId, holidayDto);
+  }
+
+  @Delete(':id/holidays/:holidayId')
+  @UseGuards(JwtAuthGuard)
+  deleteHoliday(
+    @Param('id') id: string,
+    @Param('holidayId') holidayId: string,
+  ) {
+    return this.companyService.deleteHoliday(id, holidayId);
   }
 
   @Get('id/:id')

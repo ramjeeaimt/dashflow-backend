@@ -49,6 +49,7 @@ export class LeaveListener {
     leaveId: string;
     employeeId: string;
     employeeName: string;
+    employeeEmail?: string;
     startDate: string | Date;
     endDate: string | Date;
     reason: string;
@@ -79,11 +80,34 @@ export class LeaveListener {
       console.error('[LeaveListener] Failed to send admin push notification:', err.message);
     }
 
+    // Direct Confirmation Email to Employee who submitted the leave request
+    try {
+      if (payload.employeeEmail) {
+        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+        await this.mailService.sendLeaveStatusEmail(payload.employeeEmail, {
+          employeeName: payload.employeeName,
+          status: 'REQUESTED',
+          startDate: String(payload.startDate),
+          endDate: String(payload.endDate),
+          userReason: payload.reason || 'Not specified',
+          actionUrl: `${frontendUrl}/employee/leaves`,
+          companyId: payload.companyId,
+        });
+        console.log(`[LeaveListener] Sent leave submission confirmation email to employee: ${payload.employeeEmail}`);
+      }
+    } catch (err) {
+      console.error('[LeaveListener] Failed to send leave submission confirmation to employee:', err.message);
+    }
+
     // Email to Admins
     try {
       const uniqueAdmins = await this.getAdminEmails(payload.companyId, payload.companyEmail, payload.attendanceAlertEmails);
       
       uniqueAdmins.forEach(adminEmail => {
+        // Avoid sending duplicate email if admin is the applicant themselves
+        if (payload.employeeEmail && adminEmail.toLowerCase() === payload.employeeEmail.toLowerCase()) {
+          return;
+        }
         this.mailService.sendLeaveStatusEmail(adminEmail, {
           employeeName: payload.employeeName,
           status: 'REQUESTED',
@@ -91,7 +115,7 @@ export class LeaveListener {
           endDate: String(payload.endDate),
           userReason: payload.reason || 'Not specified',
           companyId: payload.companyId,
-        }).catch(err => console.error(`[LeaveListener] Failed to send leave alert to ${adminEmail}:`, err.message));
+        }).catch(err => console.error(`[LeaveListener] Failed to send leave alert to admin ${adminEmail}:`, err.message));
       });
     } catch (err) {
       console.error('[LeaveListener] Admin email alerting failed for leave request:', err.message);

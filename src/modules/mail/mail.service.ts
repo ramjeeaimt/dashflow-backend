@@ -68,17 +68,25 @@ export class MailService {
     // Create distinct subjects so email clients don't merge/hide them if Employee = Admin
     const isForEmployee = !!data.actionUrl;
     const subject = isForEmployee
-      ? `Your Leave Application is ${statusUpper}`
+      ? (statusUpper === 'REQUESTED' ? 'Your Leave Application has been Submitted' : `Your Leave Application is ${statusUpper}`)
       : `Leave Application ${statusUpper} - ${data.employeeName}`;
 
     let color = '#f59e0b';
-    let actionText = `A new leave request has been submitted by <strong>${data.employeeName}</strong> and requires your review.`;
+    let actionText = isForEmployee
+      ? `Your leave request has been submitted successfully and is awaiting review.`
+      : `A new leave request has been submitted by <strong>${data.employeeName}</strong> and requires your review.`;
+    let headingText = isForEmployee && statusUpper === 'REQUESTED' ? 'Leave Submitted' : `Leave ${statusUpper}`;
+
     if (statusUpper === 'APPROVED') {
       color = '#10b981';
-      actionText = `The leave request for <strong>${data.employeeName}</strong> has been approved.`;
+      actionText = isForEmployee
+        ? `Your leave request has been approved.`
+        : `The leave request for <strong>${data.employeeName}</strong> has been approved.`;
     } else if (statusUpper === 'REJECTED') {
       color = '#ef4444';
-      actionText = `The leave request for <strong>${data.employeeName}</strong> has been rejected.`;
+      actionText = isForEmployee
+        ? `Your leave request has been rejected.`
+        : `The leave request for <strong>${data.employeeName}</strong> has been rejected.`;
     }
     const buttonHtml = data.actionUrl ? `
       <div style="margin-top: 24px;">
@@ -88,7 +96,7 @@ export class MailService {
 
     const defaultMsgHtml = `
       <div style="background: #f8fafc; border-left: 4px solid ${color}; padding: 24px; margin-bottom: 32px; border-radius: 4px;">
-        <h2 style="color: ${color}; font-size: 20px; font-weight: 800; margin: 0 0 12px 0;">Leave ${statusUpper}</h2>
+        <h2 style="color: ${color}; font-size: 20px; font-weight: 800; margin: 0 0 12px 0;">${headingText}</h2>
         <p style="margin: 0; color: #475569; font-size: 15px;">${actionText}</p>
         <div style="margin-top: 16px; font-size: 14px;">
           <p style="margin: 4px 0;"><strong>Employee:</strong> ${data.employeeName}</p>
