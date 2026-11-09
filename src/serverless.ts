@@ -1,18 +1,23 @@
-import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { setupApp } from './setup';
 
-let appPromise: Promise<any>;
+let server: any = null;
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  if (server) return server;
+  console.log('[Serverless] Initializing Nest application...');
+  const app = await NestFactory.create(AppModule, {
+    logger: ['error', 'warn', 'log'],
+  });
   setupApp(app);
   await app.init();
-  return app.getHttpAdapter().getInstance();
+  server = app.getHttpAdapter().getInstance();
+  console.log('[Serverless] Nest application successfully initialized');
+  return server;
 }
 
-export default async (req, res) => {
+const handler = async (req: any, res: any) => {
   // Set CORS headers for all requests
   const allowedOrigins = [
     'https://dashflow-frontend.vercel.app',
@@ -22,16 +27,15 @@ export default async (req, res) => {
     'http://localhost:5173',
     'http://localhost:5174',
     'http://localhost:3000',
-    'http://127.0.0.1:5173'
+    'http://127.0.0.1:5173',
   ];
 
-  const origin = req.headers.origin;
-  const isAllowed = !origin || allowedOrigins.includes(origin) || (origin.endsWith('.vercel.app'));
+  const origin = req.headers?.origin;
+  const isAllowed = !origin || allowedOrigins.includes(origin) || (origin && origin.endsWith('.vercel.app'));
 
   if (isAllowed && origin) {
     res.setHeader('Access-Control-Allow-Origin', origin);
   } else {
-    // If not allowed or no origin (e.g. direct request), still provide a valid origin for browser preflights if possible
     res.setHeader('Access-Control-Allow-Origin', origin || 'https://dashflow-frontend.vercel.app');
   }
 
@@ -44,18 +48,21 @@ export default async (req, res) => {
   }
 
   try {
-    if (!appPromise) {
-      appPromise = bootstrap();
-    }
-    const handler = await appPromise;
-    return handler(req, res);
-  } catch (error) {
+    const appInstance = await bootstrap();
+    return appInstance(req, res);
+  } catch (error: any) {
     console.error('SERVERLESS_BOOTSTRAP_ERROR:', error);
-    res.status(500).json({
-      statusCode: 500,
-      message: 'Internal Server Error during bootstrap',
-      error: error.message,
-      stack: error.stack // Added for debugging
-    });
+    // Reset server so retry can re-attempt initialization
+    server = null;
+    if (!res.headersSent) {
+      return res.status(500).json({
+        statusCode: 500,
+        message: 'Internal Server Error during serverless bootstrap',
+        error: error?.message || String(error),
+        stack: error?.stack,
+      });
+    }
   }
 };
+
+export default handler;

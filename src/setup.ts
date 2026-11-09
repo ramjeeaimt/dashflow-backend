@@ -81,7 +81,7 @@ export function setupApp(app: INestApplication) {
     .build();
   const document = SwaggerModule.createDocument(app, config);
 
-  if (process.env.NODE_ENV !== 'production') {
+  if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
     try {
       const yamlString = yaml.stringify(document, {});
       fs.writeFileSync('./swagger.yaml', yamlString);
@@ -90,6 +90,8 @@ export function setupApp(app: INestApplication) {
     }
   }
 
-  SwaggerModule.setup('api', app, document);
+  if (!process.env.VERCEL) {
+    SwaggerModule.setup('api', app, document);
+  }
   return app;
 }

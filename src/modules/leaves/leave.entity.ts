@@ -45,17 +45,17 @@ export class Leave {
   @Column()
   type: string; // sick, casual, earned, etc.
 
-  @Column({ nullable: true })
+  @Column({ type: 'text', nullable: true })
   @IsString()
   @IsOptional()
   adminComment?: string;
 
-  @Column({ nullable: true })
+  @Column({ type: 'text', nullable: true })
   @IsString()
   @IsOptional()
   reviewedBy?: string;
 
-  @Column({ nullable: true })
+  @Column({ type: 'text', nullable: true })
   @IsString()
   @IsOptional()
   reviewedByName?: string;

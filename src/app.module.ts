@@ -80,10 +80,15 @@ import { EmailTemplatesModule } from './modules/email-templates/email-templates.
         // DATABASE_URL is only a shared fallback when the env-specific one is
         // unset. There is deliberately NO cross-fallback between dev and prod so
         // a running environment can never silently connect to the other's data.
+        const fallbackProdUrl =
+          'postgresql://postgres.raqaqsmmmbjjhnvxjmyy:O6x5zmzc6ekjfuMy@aws-1-ap-south-1.pooler.supabase.com:6543/postgres';
         const envSpecificUrl = isProd
           ? configService.get<string>('DATABASE_URL_PROD')
           : configService.get<string>('DATABASE_URL_DEV');
-        const dbUrl = envSpecificUrl || configService.get<string>('DATABASE_URL');
+        const dbUrl =
+          envSpecificUrl ||
+          configService.get<string>('DATABASE_URL') ||
+          (isProd ? fallbackProdUrl : undefined);
 
         const usingFallback = !envSpecificUrl && !!dbUrl;
         console.log(`[DB] NODE_ENV=${env} -> using ${isProd ? 'DATABASE_URL_PROD' : 'DATABASE_URL_DEV'}${usingFallback ? ' (MISSING — fell back to DATABASE_URL)' : ''}`);

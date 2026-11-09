@@ -13,7 +13,12 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import puppeteer from 'puppeteer-core';
-const chromium = require('@sparticuz/chromium');
+let chromium: any;
+try {
+  chromium = require('@sparticuz/chromium');
+} catch {
+  // Gracefully handle serverless environments without chromium
+}
 const PDFDocument = require('pdfkit');
 
 function toDateString(value: Date | string): string {

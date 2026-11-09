@@ -12,7 +12,12 @@ import { Client } from './client.entity';
 import { Invoice } from '../invoices/invoice.entity';
 import * as nodemailer from 'nodemailer';
 import * as puppeteer from 'puppeteer-core';
-import chromium from '@sparticuz/chromium';
+let chromium: any;
+try {
+  chromium = require('@sparticuz/chromium');
+} catch {
+  // Gracefully handle serverless environments without chromium
+}
 import { CompaniesGstService } from '../companyGstDocs/companies.Gst.service';
 // IMPORT THE SERVICE THAT HOLDS YOUR CompanyDocsGST DATA
 

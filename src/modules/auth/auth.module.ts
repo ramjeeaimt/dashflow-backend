@@ -25,7 +25,7 @@ import { ForgotPasswordModule } from './forgot-password/forgot-password.module';
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({
-        secret: configService.get<string>('JWT_SECRET'),
+        secret: configService.get<string>('JWT_SECRET') || 'super-secret-key-change-in-production',
         signOptions: { expiresIn: configService.get<string>('JWT_EXPIRES_IN') || '365d' },
       }),
       inject: [ConfigService],
