@@ -11,7 +11,6 @@ import { Repository } from 'typeorm';
 import { Client } from './client.entity';
 import { Invoice } from '../invoices/invoice.entity';
 import * as nodemailer from 'nodemailer';
-import * as puppeteer from 'puppeteer-core';
 let chromium: any;
 try {
   chromium = require('@sparticuz/chromium');
@@ -146,6 +145,7 @@ export class ClientsService implements OnModuleInit {
 
     const isProd = process.env.NODE_ENV === 'production' || !!process.env.VERCEL;
     
+    const puppeteer = await import('puppeteer-core');
     const browser = await puppeteer.launch({
       args: isProd ? chromium.args : ['--no-sandbox', '--disable-setuid-sandbox'],
       defaultViewport: isProd ? chromium.defaultViewport : { width: 1280, height: 720 },

@@ -12,7 +12,6 @@ import { Leave } from '../leaves/leave.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
-import puppeteer from 'puppeteer-core';
 let chromium: any;
 try {
   chromium = require('@sparticuz/chromium');
@@ -798,6 +797,7 @@ export class FinanceService {
           : undefined
       );
 
+      const puppeteer = await import('puppeteer-core');
       const browser = await puppeteer.launch({
         args: chromium.args,
         defaultViewport: chromium.defaultViewport,
