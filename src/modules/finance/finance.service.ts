@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Brackets, In } from 'typeorm';
 import { Payroll } from './entities/payroll.entity';
@@ -228,6 +228,13 @@ export class FinanceService {
           .orWhere('employee.companyId = :companyId', { companyId });
       }));
     }
+
+    // Do not return records for inactive or soft-deleted employees (will show when made active)
+    query.andWhere('LOWER(COALESCE(employee.status, :defStatus)) = :activeStatus', {
+      defStatus: 'active',
+      activeStatus: 'active',
+    });
+    query.andWhere('(employee.isDeleted IS FALSE OR employee.isDeleted IS NULL)');
 
     // 3. Employee Case: Filter by Employee (User ID or Profile ID)
     if (employeeId && employeeId !== 'undefined') {
@@ -467,12 +474,10 @@ export class FinanceService {
 
 
   async generateMonthlyPayroll(month: number, year: number, companyId: string, employeeId?: string) {
-    // Get all employees with company relation to read policy settings
-    const whereClause: any = { companyId, isDeleted: false };
+    // Only generate payroll for active, non-deleted employees
+    const whereClause: any = { companyId, isDeleted: false, status: In(['active', 'Active']) };
     if (employeeId) {
       whereClause.id = employeeId;
-    } else {
-      whereClause.status = In(['active', 'Active']);
     }
     const employees = await this.employeeRepository.find({
       where: whereClause,
@@ -775,6 +780,10 @@ export class FinanceService {
     });
 
     if (!payroll) throw new NotFoundException('Payroll not found');
+
+    if (payroll.employee && (payroll.employee.status || 'active').toLowerCase() !== 'active') {
+      throw new BadRequestException('Cannot send payslip to an inactive employee. Please activate the employee first.');
+    }
 
     // Ensure all placeholders ([Employee Name], [Payslip ID], [Month Year], etc.) are dynamically interpolated
     payslipHtml = this.interpolatePayrollHtml(payslipHtml, payroll);
@@ -1496,6 +1505,10 @@ export class FinanceService {
 
     if (!payroll) throw new NotFoundException('Payroll not found');
     if (!payroll.employee?.user?.email) throw new Error('Employee email not found');
+
+    if (payroll.employee && (payroll.employee.status || 'active').toLowerCase() !== 'active') {
+      throw new BadRequestException('Cannot send payroll email to an inactive employee. Please activate the employee first.');
+    }
 
     if (customNotes !== undefined) {
       payroll.notes = customNotes;
