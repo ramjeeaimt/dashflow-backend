@@ -776,6 +776,10 @@ export class FinanceService {
 
     if (!payroll) throw new NotFoundException('Payroll not found');
 
+    // Ensure all placeholders ([Employee Name], [Payslip ID], [Month Year], etc.) are dynamically interpolated
+    payslipHtml = this.interpolatePayrollHtml(payslipHtml, payroll);
+    emailBodyHtml = this.interpolatePayrollHtml(emailBodyHtml, payroll);
+
     // Save custom HTML templates and sync parsed numeric values to database columns
     payroll.customPayslipHtml = payslipHtml;
     payroll.customEmailBodyHtml = emailBodyHtml;
