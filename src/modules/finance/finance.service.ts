@@ -1131,14 +1131,19 @@ export class FinanceService {
     };
 
     // Title Row
+    const standardPayslipId = this.generateStandardPayslipId(payroll);
+
     doc.rect(leftX, currentY, rightX - leftX, 40).stroke();
     doc.fillColor('#000').fontSize(14).font('Helvetica-Bold').text('Salary Slip', leftX, currentY + 8, { width: rightX - leftX, align: 'center' });
-    doc.fontSize(12).font('Helvetica').text('For the month of: ', leftX + 160, currentY + 25);
-    doc.font('Helvetica-Bold').text(payMonth, leftX + 260, currentY + 25);
+    doc.fontSize(10).font('Helvetica').text('For month: ', leftX + 10, currentY + 25);
+    doc.font('Helvetica-Bold').text(payMonth, leftX + 68, currentY + 25);
+    doc.font('Helvetica').text('Payslip ID: ', rightX - 245, currentY + 25);
+    doc.font('Helvetica-Bold').text(standardPayslipId, rightX - 190, currentY + 25);
     currentY += 40;
 
     // Employee Details Section
     currentY = drawRow(currentY, 'Employee Details', 'Details', false, true);
+    currentY = drawRow(currentY, 'Payslip Number / ID', standardPayslipId);
     currentY = drawRow(currentY, 'Employee Name', empName);
     currentY = drawRow(currentY, 'Employee ID', empId);
     currentY = drawRow(currentY, 'Designation', designation);
@@ -1532,10 +1537,36 @@ export class FinanceService {
     return { message: 'Email sent successfully with attachment' };
   }
 
+  generateStandardPayslipId(payroll: any): string {
+    if (!payroll) return 'DIFMO-PAY-STANDARD-REF';
+    const employee = payroll.employee || {};
+    const company = employee.company || payroll.company || {};
+    const companyName = company.name || 'DIFMO';
+    const companyPrefix = companyName.replace(/[^a-zA-Z0-9]/g, '').slice(0, 5).toUpperCase() || 'DIFMO';
+
+    const monthNum = Number(payroll.month || new Date().getMonth() + 1);
+    const yearNum = Number(payroll.year || new Date().getFullYear());
+    const monthPadded = String(monthNum).padStart(2, '0');
+    const yearStr = String(yearNum);
+
+    const empCode = (employee.employeeCode || payroll.employeeCode || 'EMP').toUpperCase();
+
+    let rawId = String(payroll.id || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    if (rawId.startsWith('PAYROLL')) {
+      rawId = rawId.replace('PAYROLL', '');
+    }
+    const suffix = rawId && rawId.length >= 6
+      ? rawId.slice(-6)
+      : ((Math.abs((yearNum * 100 + monthNum) * 31 + empCode.split('').reduce((a, c) => a + c.charCodeAt(0), 0)) * 7919) % 16777215).toString(16).padStart(6, '0').toUpperCase();
+
+    return `${companyPrefix}-PAY-${yearStr}${monthPadded}-${empCode}-${suffix}`;
+  }
+
   interpolatePayrollHtml(html: string, payroll: Payroll): string {
     if (!html) return '';
     let res = html;
 
+    const payslipId = this.generateStandardPayslipId(payroll);
     const user = payroll.employee?.user;
     const employeeName = user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Valued Employee' : 'Valued Employee';
     const employeeCode = payroll.employee?.employeeCode || 'DIF0001';
@@ -1563,6 +1594,11 @@ export class FinanceService {
     const bankName = (payroll.employee as any)?.bankName || 'Registered Bank';
     const rawAccount = String((payroll.employee as any)?.accountNumber || '').trim();
     const accountEnding = rawAccount.length >= 4 ? rawAccount.slice(-4) : (rawAccount || 'XXXX');
+
+    // 0. Payslip ID / Reference (Long & Standard: e.g. DIFMO-PAY-202611-DIF0012-279057)
+    res = res.replace(/\[(payslip\s*id|payslip\s*no|payslip\s*number|slip\s*id|payslip-id|payslip_id|payslip)\]/gi, payslipId);
+    res = res.replace(/\{(\s*payslipId|\s*payslip_id|\s*payslipNo|\s*payslipNumber\s*)\}/gi, payslipId);
+    res = res.replace(/\$\{(\s*payslipId|\s*payslip_id|\s*payslipNo|\s*payslipNumber|\s*slipId\s*)\}/gi, payslipId);
 
     // 1. Employee Name
     res = res.replace(/\[(employee\s*name|name|emp\s*name)\]/gi, employeeName);
