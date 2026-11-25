@@ -1495,6 +1495,10 @@ export class FinanceService {
 
     const netSal = this.parseSalary(payroll.netSalary);
 
+    if (customHtml) {
+      customHtml = this.interpolatePayrollHtml(customHtml, payroll);
+    }
+
     // Generate PDF for attachment
     const pdfBuffer = await this.generatePayrollSlip(id);
 
@@ -1526,5 +1530,101 @@ export class FinanceService {
     await this.payrollRepository.save(payroll);
 
     return { message: 'Email sent successfully with attachment' };
+  }
+
+  interpolatePayrollHtml(html: string, payroll: Payroll): string {
+    if (!html) return '';
+    let res = html;
+
+    const user = payroll.employee?.user;
+    const employeeName = user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Valued Employee' : 'Valued Employee';
+    const employeeCode = payroll.employee?.employeeCode || 'DIF0001';
+
+    const monthNum = payroll.month || new Date().getMonth() + 1;
+    const yearNum = payroll.year || new Date().getFullYear();
+    const monthNames = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    const monthName = monthNames[monthNum - 1] || 'Current Month';
+    const shortMonth = monthName.slice(0, 3);
+    const yearStr = yearNum.toString();
+    const monthYear = `${monthName} ${yearStr}`;
+
+    const lastDay = new Date(yearNum, monthNum, 0).getDate();
+    const lastDayPadded = String(lastDay).padStart(2, '0');
+    const payPeriod = `01-${shortMonth}-${yearStr} to ${lastDayPadded}-${shortMonth}-${yearStr}`;
+
+    const netNum = Number(payroll.netSalary || payroll.basicSalary || 0);
+    const netFormatted = netNum.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const basicFormatted = Number(payroll.basicSalary || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const deductionsFormatted = Number((payroll.deductions || 0) + (payroll.leaveDeduction || 0) + (payroll.halfDeduction || 0) + (payroll.lateDeductionAmount || 0)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    const bankName = (payroll.employee as any)?.bankName || 'Registered Bank';
+    const rawAccount = String((payroll.employee as any)?.accountNumber || '').trim();
+    const accountEnding = rawAccount.length >= 4 ? rawAccount.slice(-4) : (rawAccount || 'XXXX');
+
+    // 1. Employee Name
+    res = res.replace(/\[(employee\s*name|name|emp\s*name)\]/gi, employeeName);
+    res = res.replace(/\{(\s*employeeName|\s*empName|\s*name\s*)\}/gi, employeeName);
+    res = res.replace(/\$\{(\s*employeeName|\s*empName|\s*name\s*)\}/gi, employeeName);
+
+    // 2. Month Year
+    res = res.replace(/\[(month\s*year|month\s*-\s*year|monthyear)\]/gi, monthYear);
+    res = res.replace(/\{(\s*monthYear|\s*month_year\s*)\}/gi, monthYear);
+    res = res.replace(/\$\{(\s*monthYear|\s*month_year\s*)\}/gi, monthYear);
+
+    // 3. Month & Year
+    res = res.replace(/\[(month|pay\s*month)\]/gi, monthName);
+    res = res.replace(/\{(\s*month\s*)\}/gi, monthName);
+    res = res.replace(/\$\{(\s*month\s*)\}/gi, monthName);
+
+    res = res.replace(/\[(year|pay\s*year)\]/gi, yearStr);
+    res = res.replace(/\{(\s*year\s*)\}/gi, yearStr);
+    res = res.replace(/\$\{(\s*year\s*)\}/gi, yearStr);
+
+    // 4. Employee ID / Code
+    res = res.replace(/\[(employee\s*id|emp\s*id|employee\s*code|emp\s*code|dif\s*0+x*|dif00xx)\]/gi, employeeCode);
+    res = res.replace(/\{(\s*employeeId|\s*employeeCode|\s*empId|\s*empCode\s*)\}/gi, employeeCode);
+    res = res.replace(/\$\{(\s*employeeId|\s*employeeCode|\s*empId|\s*empCode|\s*code\s*)\}/gi, employeeCode);
+
+    // 5. Pay Period
+    res = res.replace(/\[(pay\s*period|01-month-year\s+to\s+end-month-year|01-month-year\s+to\s+end\s+month-year)\]/gi, payPeriod);
+    res = res.replace(/\[01-[a-z0-9_-]+\s+to\s+[a-z0-9_-]+\]/gi, payPeriod);
+    res = res.replace(/\{(\s*payPeriod|\s*pay_period\s*)\}/gi, payPeriod);
+    res = res.replace(/\$\{(\s*payPeriod|\s*pay_period\s*)\}/gi, payPeriod);
+
+    // 6. Net Amount
+    res = res.replace(/₹\s*\[(net\s*amount|net\s*credited|net\s*salary|salary|amount)\]/gi, `₹${netFormatted}`);
+    res = res.replace(/INR\s*\[(net\s*amount|net\s*credited|net\s*salary|salary|amount)\]/gi, `INR ${netFormatted}`);
+    res = res.replace(/\[(net\s*amount|net\s*credited|net\s*salary|net\s*payable|salary)\]/gi, netFormatted);
+    res = res.replace(/\{(\s*netSalary|\s*netAmount|\s*netCredited|\s*salary\s*)\}/gi, netFormatted);
+    res = res.replace(/\$\{(\s*netSalary|\s*netAmount|\s*netCredited|\s*salary|\s*amount\s*)\}/gi, netFormatted);
+
+    // 7. Bank Name & Account
+    res = res.replace(/\[(bank\s*name|bank)\]/gi, bankName);
+    res = res.replace(/\{(\s*bankName|\s*bank\s*)\}/gi, bankName);
+    res = res.replace(/\$\{(\s*bankName|\s*bank\s*)\}/gi, bankName);
+
+    res = res.replace(/\[(xxxx|account\s*number|acc\s*no|ac\s*no)\]/gi, accountEnding);
+    res = res.replace(/\{(\s*accountNumber|\s*account_number\s*)\}/gi, accountEnding);
+    res = res.replace(/\$\{(\s*accountNumber|\s*account_number\s*)\}/gi, accountEnding);
+
+    // 8. Basic & Deductions
+    res = res.replace(/₹\s*\[(gross\s*salary|basic\s*salary)\]/gi, `₹${basicFormatted}`);
+    res = res.replace(/\[(gross\s*salary|basic\s*salary)\]/gi, basicFormatted);
+    res = res.replace(/\{(\s*grossSalary|\s*basicSalary\s*)\}/gi, basicFormatted);
+    res = res.replace(/\$\{(\s*grossSalary|\s*basicSalary\s*)\}/gi, basicFormatted);
+
+    res = res.replace(/₹\s*\[(deductions|total\s*deductions)\]/gi, `₹${deductionsFormatted}`);
+    res = res.replace(/\[(deductions|total\s*deductions)\]/gi, deductionsFormatted);
+    res = res.replace(/\{(\s*deductions\s*)\}/gi, deductionsFormatted);
+    res = res.replace(/\$\{(\s*deductions\s*)\}/gi, deductionsFormatted);
+
+    if (!/<(p|div|table|ul|ol|h[1-6]|br)[^>]*>/i.test(res)) {
+      res = res.replace(/\r?\n/g, '<br/>');
+    }
+
+    return res;
   }
 }
